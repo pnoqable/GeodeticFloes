@@ -74,26 +74,37 @@ while state.running:
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'v':
             state.voronoi = not state.voronoi
 
-    def reflect( pos, vel ):
+    state.resetStats()
+
+    rejections = np.zeros( ( vertices.shape[0], vertices.shape[0] ), dtype=(float,3) )
+    
+    def calcRejection( i, j ):
+        d = vertices[i] - vertices[j]
+        lendsquare = np.inner( d, d )
+        lend = np.sqrt( lendsquare )
+        normd = d / lend if lend else d
+        rejection = normd / max( 0.1, lendsquare )
+        rejections[i,j] =  rejection
+        rejections[j,i] = -rejection
+        state.dmin = min( lend, state.dmin )
+        state.dmax = max( lend, state.dmax )
+            
+    for i in range( vertices.shape[0] ):
+        for j in range( i+1, vertices.shape[0] ):
+            calcRejection(i,j)
+
+    def project( pos, vel ):
         n = norm( pos )
         return vel - np.inner( n, vel ) * n
 
-    state.resetStats()
-    
-    for i in range( vertices.shape[0] ):
-        for j in range( i+1, vertices.shape[0] ):
-            d = vertices[i] - vertices[j]
-            rejection = norm(d) / max( 0.1, np.inner( d, d ) )
-            translations[i] += 0.01 * rejection
-            translations[j] -= 0.01 * rejection
-            state.dmin = min( len(d), state.dmin )
-            state.dmax = max( len(d), state.dmax )
-
-        translations[i] = 0.9 * reflect( vertices[i], translations[i] )
-
-    for i in range( vertices.shape[0] ):
+    def calcVertex( i ):
+        translations[i] += 0.01 * np.sum( rejections[i,:], axis=0 )
+        translations[i] = 0.9 * project( vertices[i], translations[i] )
         vertices[i] = norm( vertices[i] + translations[i] )
     
+    for i in range( vertices.shape[0] ):
+        calcVertex( i )
+        
     glClear ( GL_COLOR_BUFFER_BIT )
     glClear ( GL_DEPTH_BUFFER_BIT )
     
