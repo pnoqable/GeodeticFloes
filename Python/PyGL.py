@@ -5,6 +5,7 @@ from OpenGL.GLUT import *
 from ctypes import *
 import numpy as np
 from scipy.spatial import *
+from concurrent.futures import *
 
 pygame.init ()
 screen = pygame.display.set_mode ((800,600), pygame.OPENGL | pygame.DOUBLEBUF, 24)
@@ -89,9 +90,10 @@ while state.running:
         state.dmin = min( lend, state.dmin )
         state.dmax = max( lend, state.dmax )
             
-    for i in range( vertices.shape[0] ):
-        for j in range( i+1, vertices.shape[0] ):
-            calcRejection(i,j)
+    with ThreadPoolExecutor( 8 ) as executor:
+        for i in range( vertices.shape[0] ):
+            for j in range( i+1, vertices.shape[0] ):
+                executor.submit( calcRejection, i, j )
 
     def project( pos, vel ):
         n = norm( pos )
@@ -102,8 +104,9 @@ while state.running:
         translations[i] = 0.9 * project( vertices[i], translations[i] )
         vertices[i] = norm( vertices[i] + translations[i] )
     
-    for i in range( vertices.shape[0] ):
-        calcVertex( i )
+    with ThreadPoolExecutor( 8 ) as executor:
+        for i in range( vertices.shape[0] ):
+            executor.submit( calcVertex, i )
         
     glClear ( GL_COLOR_BUFFER_BIT )
     glClear ( GL_DEPTH_BUFFER_BIT )
