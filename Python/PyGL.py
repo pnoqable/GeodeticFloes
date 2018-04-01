@@ -33,34 +33,52 @@ glDepthFunc( GL_LESS )
 glEnable( GL_BLEND )
 glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA )
 
-running = True
-while running:
+class GameState:
+    running  = True
+    points   = True
+    delauney = True
+    voronoi  = True
+    dmin     = 2
+    dmax     = 0
 
-    for event in pygame.event.get():
-        # print( event.type, event.dict )
-        if ( event.type == pygame.QUIT ) or \
-           ( event.type == pygame.KEYDOWN ) and ( event.dict['key'] == 27 ):
-            running = False
-        elif ( event.type == pygame.MOUSEMOTION ) and event.dict['buttons'][0]:
-            glRotate( np.pi / 12 * event.dict['rel'][0], 0,1,0 )
-            # glRotate( np.pi / 12 * event.dict['rel'][1], 1,0,0 )
-        elif ( event.type == pygame.MOUSEBUTTONDOWN ) and event.dict['button'] == 4:
+    def resetStats(self):
+        self.dmin = 2
+        self.dmax = 0
+
+state = GameState()
+
+while state.running:
+
+    for e in pygame.event.get():
+        # print( e.type, e.dict )
+        if e.type == pygame.QUIT or \
+           e.type == pygame.KEYDOWN and e.dict['key'] == 27:
+            state.running = False
+        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][0]:
+            glRotate( np.pi / 12 * e.dict['rel'][0], 0,1,0 )
+            # glRotate( np.pi / 12 * e.dict['rel'][1], 1,0,0 )
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 4:
             glTranslatef( 0, 0,  0.5 )
-        elif ( event.type == pygame.MOUSEBUTTONDOWN ) and event.dict['button'] == 5:
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 5:
             glTranslatef( 0, 0, -0.5 )
-        elif ( event.type == pygame.KEYDOWN ) and event.dict['unicode'] == '+':
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == '+':
             vertices = np.append( vertices, [np.random.sample(3) - 0.5], axis=0 )
             translations = np.append( translations, [( 0, 0, 0 )], axis=0 )
-        elif ( event.type == pygame.KEYDOWN ) and event.dict['unicode'] == '-':
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == '-':
             vertices = vertices[:-1]
             translations = translations[:-1]
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'p':
+            state.points = not state.points
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'd':
+            state.delauney = not state.delauney
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'v':
+            state.voronoi = not state.voronoi
 
     def reflect( pos, vel ):
         n = norm( pos )
         return vel - np.inner( n, vel ) * n
 
-    dmin = 20.
-    dmax = 0.
+    state.resetStats()
     
     for i in range( vertices.shape[0] ):
         for j in range( i+1, vertices.shape[0] ):
@@ -68,8 +86,8 @@ while running:
             rejection = norm(d) / max( 0.1, np.inner( d, d ) )
             translations[i] += 0.01 * rejection
             translations[j] -= 0.01 * rejection
-            dmin = min( len(d), dmin )
-            dmax = max( len(d), dmax )
+            state.dmin = min( len(d), state.dmin )
+            state.dmax = max( len(d), state.dmax )
 
         translations[i] = 0.9 * reflect( vertices[i], translations[i] )
 
@@ -82,45 +100,42 @@ while running:
     # glBufferData (GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW)
     # glVertexPointer (3, GL_FLOAT, 0, None)
 
-    glEnable( GL_DEPTH_TEST )
-    glDisable( GL_BLEND )
+    if state.points:
+        glPointSize( 5 )
+        glColor4f( 0, 0, 1, 0.5 )
+        # glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
+        glBegin( GL_POINTS )
+        for vertex in vertices:
+            glVertex3fv( vertex )
+        glEnd()
+
+    hull = ConvexHull( vertices )
+    if state.delauney:
+        glColor4f( 0, 0, 1, 0.2 )
+        for simplex in hull.simplices:
+            glBegin( GL_LINE_LOOP )
+            for vertex in vertices[simplex]:
+                glVertex3fv( vertex )
+            glEnd()
 
     sv = SphericalVoronoi( vertices )
     sv.sort_vertices_of_regions()
-    voronoiVertices = np.array( sv.vertices, dtype='float32' )
-    for region in sv.regions:
-        glColor4f( 0, 0, 0, 1 )
-        glBegin( GL_LINE_LOOP )
-        for vertex in sv.vertices[region]:
-            glVertex3f( vertex[0], vertex[1], vertex[2] )
-        glEnd()
-        if( sv.vertices[region].shape[0] % 2 ):
-            glColor4f( 0.5, 0.5, 0.5, 1 )
-        else:
-            glColor4f( 1, 1, 1, 1 )
-        glBegin( GL_POLYGON )
-        for vertex in sv.vertices[region]:
-            glVertex3fv( vertex )
-        glEnd()
-
-    glDisable( GL_DEPTH_TEST )
-    glEnable( GL_BLEND )
-
-    glPointSize( 5 )
-    glColor4f( 0, 0, 1, 0.1 )
-    # glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
-    glBegin( GL_POINTS )
-    for vertex in vertices:
-        glVertex3fv( vertex )
-    glEnd()
-
-    hull = ConvexHull( vertices )
-    for simplex in hull.simplices:
-        glBegin( GL_LINE_LOOP )
-        for vertex in vertices[simplex]:
-            glVertex3fv( vertex )
-        glEnd()
-        # glDrawElements( GL_LINE_LOOP, 3, GL_UNSIGNED_INT, simplex )
+    if state.voronoi:
+        voronoiVertices = np.array( sv.vertices, dtype='float32' )
+        for region in sv.regions:
+            glColor4f( 0, 0, 0, 1 )
+            glBegin( GL_LINE_LOOP )
+            for vertex in sv.vertices[region]:
+                glVertex3f( vertex[0], vertex[1], vertex[2] )
+            glEnd()
+            if( sv.vertices[region].shape[0] % 2 ):
+                glColor4f( 0.5, 0.5, 0.5, 1 )
+            else:
+                glColor4f( 1, 1, 1, 1 )
+            glBegin( GL_POLYGON )
+            for vertex in sv.vertices[region]:
+                glVertex3fv( vertex )
+            glEnd()
 
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
