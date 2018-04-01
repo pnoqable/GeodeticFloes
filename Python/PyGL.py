@@ -47,6 +47,7 @@ class GameState:
         self.dmax = 0
 
 state = GameState()
+executor = ThreadPoolExecutor( 8 )
 
 while state.running:
 
@@ -89,11 +90,12 @@ while state.running:
         rejections[j,i] = -rejection
         state.dmin = min( lend, state.dmin )
         state.dmax = max( lend, state.dmax )
-            
-    with ThreadPoolExecutor( 8 ) as executor:
-        for i in range( vertices.shape[0] ):
-            for j in range( i+1, vertices.shape[0] ):
-                executor.submit( calcRejection, i, j )
+
+    futures = list()
+    for i in range( vertices.shape[0] ):
+        for j in range( i+1, vertices.shape[0] ):
+            futures.append( executor.submit( calcRejection, i, j ) )
+    wait( futures )
 
     def project( pos, vel ):
         n = norm( pos )
@@ -103,10 +105,17 @@ while state.running:
         translations[i] += 0.01 * np.sum( rejections[i,:], axis=0 )
         translations[i] = 0.9 * project( vertices[i], translations[i] )
         vertices[i] = norm( vertices[i] + translations[i] )
+
+    futures = list()
+    for i in range( vertices.shape[0] ):
+        futures.append( executor.submit( calcVertex, i ) )
+    wait( futures )
     
-    with ThreadPoolExecutor( 8 ) as executor:
-        for i in range( vertices.shape[0] ):
-            executor.submit( calcVertex, i )
+    hullFuture = executor.submit( ConvexHull, vertices )
+    svFuture = executor.submit( SphericalVoronoi, vertices )
+
+    hull = hullFuture.result()
+    sv = svFuture.result()
         
     glClear ( GL_COLOR_BUFFER_BIT )
     glClear ( GL_DEPTH_BUFFER_BIT )
@@ -123,7 +132,6 @@ while state.running:
             glVertex3fv( vertex )
         glEnd()
 
-    hull = ConvexHull( vertices )
     if state.delauney:
         glColor4f( 0, 0, 1, 0.2 )
         for simplex in hull.simplices:
@@ -132,7 +140,6 @@ while state.running:
                 glVertex3fv( vertex )
             glEnd()
 
-    sv = SphericalVoronoi( vertices )
     sv.sort_vertices_of_regions()
     if state.voronoi:
         voronoiVertices = np.array( sv.vertices, dtype='float32' )
