@@ -34,6 +34,8 @@ glDepthFunc( GL_LESS )
 glEnable( GL_BLEND )
 glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA )
 
+glPolygonMode( GL_FRONT,  GL_FILL )
+
 class GameState:
     running  = True
     points   = True
@@ -132,14 +134,6 @@ while state.running:
             glVertex3fv( vertex )
         glEnd()
 
-    if state.delauney:
-        glColor4f( 0, 0, 1, 0.2 )
-        for simplex in hull.simplices:
-            glBegin( GL_LINE_LOOP )
-            for vertex in vertices[simplex]:
-                glVertex3fv( vertex )
-            glEnd()
-
     sv.sort_vertices_of_regions()
     if state.voronoi:
         voronoiVertices = np.array( sv.vertices, dtype='float32' )
@@ -157,6 +151,21 @@ while state.running:
             for vertex in sv.vertices[region]:
                 glVertex3fv( vertex )
             glEnd()
+
+    glDisable( GL_DEPTH_TEST )
+    if state.delauney:
+        for simplex in hull.simplices:
+            glColor4f( 0, 0, 1, 0.2 )
+            glBegin( GL_LINE_LOOP )
+            for vertex in vertices[simplex]:
+                glVertex3fv( vertex )
+            glEnd()
+            glColor4f( 0, 0, 1, 0.1 )
+            glBegin( GL_POLYGON )
+            for vertex in vertices[simplex]:
+                glVertex3fv( vertex )
+            glEnd()
+    glEnable( GL_DEPTH_TEST )
 
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
