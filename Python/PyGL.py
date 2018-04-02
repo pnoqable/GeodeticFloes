@@ -38,8 +38,8 @@ glPolygonMode( GL_FRONT,  GL_FILL )
 
 class GameState:
     running  = True
-    points   = True
-    delauney = True
+    points   = False
+    delauney = False
     voronoi  = True
     dmin     = 2
     dmax     = 0
@@ -185,8 +185,8 @@ while state.running:
             glDrawPixels( surface.get_width(), surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, pixels )
             pos = ( pos[0], pos[1]+surface.get_height(), pos[2] )
 
-    drawText( (0,0,0), 14, "Vertices: " + str( np.array( hull.simplices ).shape[0] ) + "\n" + \
-                           "Faces: " + str( vertices.shape[0] ) + "\n" + \
+    drawText( (0,0,0), 14, "Voronoi Faces: " + str( vertices.shape[0] ) + "\n" + \
+                           "Delauney Faces: " + str( vertices.shape[0] * 2 - 4 ) + "\n" + \
                            "dmin: " + str( round( state.dmin, 2 ) ) + "\n" + \
                            "dmax: " + str( round( state.dmax, 2 ) ) )
 
