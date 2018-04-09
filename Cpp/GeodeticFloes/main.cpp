@@ -7,6 +7,10 @@
 #include <SFML/Window.hpp>
 #include <SFML/OpenGL.hpp>
 
+#include <boost/version.hpp>
+#include <boost/date_time.hpp>
+#include <boost/regex.hpp>
+
 std::ofstream logStream("log.txt");
 std::ofstream errStream("err.txt");
 
@@ -30,8 +34,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
 	}
 
-	std::cout << "no output" << std::endl;
-	std::cerr << "no error" << std::endl;
+	std::cout << "Boost version: " << BOOST_VERSION << std::endl;
+
+	namespace pt = boost::posix_time;
+	auto now = pt::second_clock::local_time().date();
+	std::cout << "Date: " << now.day() << ". " << now.month() << " " << now.year() << std::endl;
+
+	std::string s = "Boost Libraries";
+	boost::regex expr{ "\\w+\\s\\w+" };
+	std::cout << std::boolalpha << boost::regex_match( s, expr ) << std::endl;
 
 	// run the main loop
 	bool running = true;
