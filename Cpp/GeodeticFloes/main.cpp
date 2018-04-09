@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 
 #include <windows.h>
 #include <GL/glew.h>
@@ -6,8 +7,14 @@
 #include <SFML/Window.hpp>
 #include <SFML/OpenGL.hpp>
 
+std::ofstream logStream("log.txt");
+std::ofstream errStream("err.txt");
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) 
 {
+	std::cout.rdbuf(logStream.rdbuf());
+	std::cerr.rdbuf(errStream.rdbuf());
+
 	// create the window
 	sf::Window window(sf::VideoMode(800, 600), "OpenGL", sf::Style::Default, sf::ContextSettings(32));
 	window.setVerticalSyncEnabled(true);
