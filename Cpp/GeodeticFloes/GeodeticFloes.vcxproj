@@ -88,7 +88,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\lhaeussler\devel\boost;C:\Users\lhaeussler\devel\glew-2.1.0\include;C:\Users\lhaeussler\devel\SFML-2.4.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\lhaeussler\devel\eigen;C:\Users\lhaeussler\devel\boost;C:\Users\lhaeussler\devel\glew-2.1.0\include;C:\Users\lhaeussler\devel\SFML-2.4.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -119,7 +119,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\lhaeussler\devel\boost;C:\Users\lhaeussler\devel\glew-2.1.0\include;C:\Users\lhaeussler\devel\SFML-2.4.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\lhaeussler\devel\eigen;C:\Users\lhaeussler\devel\boost;C:\Users\lhaeussler\devel\glew-2.1.0\include;C:\Users\lhaeussler\devel\SFML-2.4.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
