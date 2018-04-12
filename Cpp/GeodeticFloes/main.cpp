@@ -19,62 +19,57 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	std::cout.rdbuf(logStream.rdbuf());
 	std::cerr.rdbuf(errStream.rdbuf());
 
-	// create the window
 	sf::Window window(sf::VideoMode(800, 600), "OpenGL", sf::Style::Default, sf::ContextSettings(32));
 	window.setVerticalSyncEnabled(true);
-
-	// activate the window
 	window.setActive(true);
 
-	// load resources, initialize the OpenGL states, ...
+	auto onResize = [](sf::Vector2u size) {
+		glViewport(0, 0, size.x, size.y);
+		gluPerspective(45, size.y / GLdouble(size.x), 0.1, 50.0);
+	};
+
+	onResize( window.getSize() );
 
 	GLenum err = glewInit();
-	if (GLEW_OK != err)
-	{
+	if (GLEW_OK != err) {
 		std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
 	}
 
-	std::cout << "Boost version: " << BOOST_VERSION << std::endl;
+	glClearColor(0.0, 0.5, 0.5, 1.0);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
-	namespace pt = boost::posix_time;
-	auto now = pt::second_clock::local_time().date();
-	std::cout << "Date: " << now.day() << ". " << now.month() << " " << now.year() << std::endl;
+	struct GameState {
+		bool running = true;
+		bool points = true;
+	};
 
-	std::string s = "Boost Libraries";
-	boost::regex expr{ "\\w+\\s\\w+" };
-	std::cout << std::boolalpha << boost::regex_match( s, expr ) << std::endl;
+	GameState state;
+	while (state.running) {
 
-	// run the main loop
-	bool running = true;
-	while (running)
-	{
-		// handle events
 		sf::Event event;
-		while (window.pollEvent(event))
-		{
+		while (window.pollEvent(event)) {
+			auto keyPressed = [&](sf::Keyboard::Key key) {
+				return event.type == sf::Event::KeyPressed
+					&& event.key.code == key;
+			};
+
 			if (event.type == sf::Event::Closed ||
-				event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape)
-			{
-				// end the program
-				running = false;
-			}
-			else if (event.type == sf::Event::Resized)
-			{
-				// adjust the viewport when the window is resized
-				glViewport(0, 0, event.size.width, event.size.height);
+				keyPressed(sf::Keyboard::Escape)) {
+				state.running = false;
+			} else if (event.type == sf::Event::Resized) {
+				onResize({ event.size.width, event.size.height });
+			} else if (keyPressed(sf::Keyboard::P)) {
+				state.points = !state.points;
 			}
 		}
 
-		// clear the buffers
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// draw...
 
-		// end the current frame (internally swaps the front and back buffers)
 		window.display();
 	}
-
-	// release resources...
 
 	return 0;
 } 
