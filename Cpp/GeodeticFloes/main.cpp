@@ -118,12 +118,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			//std::cout << "squareNorms:" << std::endl << squareNorms << std::endl;
 			auto directions = differences.array() / squareNorms.array().replicate<3,1>().sqrt();
 			//std::cout << "directions:" << std::endl << directions << std::endl;
-			auto rejections  = directions.array() / squareNorms.array().max( 0.1 ).replicate<3,1>();
+			auto rejections  = directions.array() / squareNorms.array().replicate<3,1>();
 			//std::cout << "rejections:" << std::endl << rejections << std::endl;
 			auto rejection = rejections.rowwise().sum();
 			//std::cout << "rejection:" << std::endl << rejection << std::endl;
 			state.translations.col(i) -= 0.01 * rejection.matrix();
-			state.translations.col(i) = 0.2 * project(state.translations.col(i), state.points.col(i));
+			state.translations.col(i) = 0.01 * state.translations.col(i); //  project(state.translations.col(i), state.points.col(i));
 		}
 
 		state.points += state.translations;
