@@ -11,8 +11,14 @@
 #include <boost/date_time.hpp>
 #include <boost/regex.hpp>
 
+#include <Eigen/Dense>
+
+#include <boost/math/constants/constants.hpp>
+
 std::ofstream logStream("log.txt");
 std::ofstream errStream("err.txt");
+
+const double pi = boost::math::constants::pi<double>();
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) 
 {
@@ -25,7 +31,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 	auto onResize = [](sf::Vector2u size) {
 		glViewport(0, 0, size.x, size.y);
-		gluPerspective(45, size.y / GLdouble(size.x), 0.1, 50.0);
+		glLoadIdentity();
+		gluPerspective(45, GLdouble(size.x) / size.y, 0.1, 50.0);
+		glTranslatef(0, 0, -5);
 	};
 
 	onResize( window.getSize() );
@@ -41,10 +49,25 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 	struct GameState {
 		bool running = true;
-		bool points = true;
+		bool drawPoints = true;
+		bool rotate = false;
+
+		Eigen::MatrixX3d points;
+
+		GameState( unsigned int numFaces ) {
+			points = Eigen::MatrixX3d::Random(Eigen::Index(numFaces), 3);
+			points.rowwise().normalize();
+		}
+
+		Eigen::Vector2i mouseMotion(Eigen::Vector2i cur) {
+			static Eigen::Vector2i last = cur;
+			Eigen::Vector2i result = cur - last;
+			last = cur;
+			return result;
+		}
 	};
 
-	GameState state;
+	GameState state( 32 );
 	while (state.running) {
 
 		sf::Event event;
@@ -60,13 +83,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			} else if (event.type == sf::Event::Resized) {
 				onResize({ event.size.width, event.size.height });
 			} else if (keyPressed(sf::Keyboard::P)) {
-				state.points = !state.points;
+				state.drawPoints = !state.drawPoints;
+			} else if (event.type == sf::Event::MouseMoved) {
+				auto& pos = event.mouseMove;
+				auto rel = state.mouseMotion({ pos.x, pos.y });
+				if (state.rotate) {
+					glRotated(pi / 12 * rel.x(), 0, 1, 0);
+				}
+			} else if (event.type == sf::Event::MouseButtonPressed) {
+				if (event.mouseButton.button == sf::Mouse::Button::Left) {
+					state.rotate = true;
+				}
+			} else if(event.type == sf::Event::MouseButtonReleased) {
+				if (event.mouseButton.button == sf::Mouse::Button::Left) {
+					state.rotate = false;
+				}
 			}
 		}
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// draw...
+		if (state.drawPoints) {
+			glEnable(GL_BLEND);
+			glPointSize(5);
+			glColor4f(0, 0, 1, 0.5);
+			glBegin(GL_POINTS);
+			for (int i = 0; i < state.points.rows(); i++) {
+				glVertex3d(state.points(i, 0), state.points(i, 1), state.points(i, 2));
+			}
+			glEnd();
+			glDisable(GL_BLEND);
+		}
 
 		window.display();
 	}
