@@ -15,6 +15,9 @@
 
 #include <boost/math/constants/constants.hpp>
 
+#undef min // undo somebody's mess with global namespace
+#undef max
+
 std::ofstream logStream("log.txt");
 std::ofstream errStream("err.txt");
 
@@ -52,11 +55,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		bool drawPoints = true;
 		bool rotate = false;
 
-		Eigen::MatrixX3d points;
+		Eigen::Matrix3Xd points;
+		Eigen::Matrix3Xd translations;
 
 		GameState( unsigned int numFaces ) {
-			points = Eigen::MatrixX3d::Random(Eigen::Index(numFaces), 3);
-			points.rowwise().normalize();
+			points = Eigen::Matrix3Xd::Random(3, numFaces);
+			points.colwise().normalize();
+			translations = Eigen::Matrix3Xd::Zero(3, numFaces);
 		}
 
 		Eigen::Vector2i mouseMotion(Eigen::Vector2i cur) {
@@ -67,7 +72,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		}
 	};
 
-	GameState state( 32 );
+	GameState state( 800 );
 	while (state.running) {
 
 		sf::Event event;
@@ -101,6 +106,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			}
 		}
 
+		auto project = [](const auto& v, const auto& n) {
+			return v - n.dot(v) * n;
+		};
+
+		for (int i = 0; i < state.points.cols(); i++) {
+			auto pos = state.points.array().col(i);
+			auto differences = state.points.array().colwise() - pos;
+			//std::cout << "differences:" << std::endl << differences << std::endl;
+			auto squareNorms = differences.matrix().colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
+			//std::cout << "squareNorms:" << std::endl << squareNorms << std::endl;
+			auto directions = differences.array() / squareNorms.array().replicate<3,1>().sqrt();
+			//std::cout << "directions:" << std::endl << directions << std::endl;
+			auto rejections  = directions.array() / squareNorms.array().max( 0.1 ).replicate<3,1>();
+			//std::cout << "rejections:" << std::endl << rejections << std::endl;
+			auto rejection = rejections.rowwise().sum();
+			//std::cout << "rejection:" << std::endl << rejection << std::endl;
+			state.translations.col(i) -= 0.01 * rejection.matrix();
+			state.translations.col(i) = 0.2 * project(state.translations.col(i), state.points.col(i));
+		}
+
+		state.points += state.translations;
+		state.points.colwise().normalize();
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		if (state.drawPoints) {
@@ -108,8 +136,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glPointSize(5);
 			glColor4f(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
-			for (int i = 0; i < state.points.rows(); i++) {
-				glVertex3d(state.points(i, 0), state.points(i, 1), state.points(i, 2));
+			for (int i = 0; i < state.points.cols(); i++) {
+				glVertex3d(state.points(0,i), state.points(1,i), state.points(2,i));
 			}
 			glEnd();
 			glDisable(GL_BLEND);
