@@ -73,7 +73,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		}
 	};
 
-	GameState state( 1800 );
+	GameState state( 100 );
 	while (state.running) {
 
 		sf::Event event;
@@ -135,20 +135,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			for (int j=0; j<t; j++) {
 				boost::asio::post(worker, [&, j] {
 					for (int i=n*j/ t; i<n*(j+1)/ t; i++) {
-						//threads.emplace_back( [&,i]{
-						auto pos = state.points.array().col(i);
-						auto differences = state.points.array().colwise() - pos;
-						//std::cout << "differences:" << std::endl << differences << std::endl;
-						auto squareNorms = differences.matrix().colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
-						//std::cout << "squareNorms:" << std::endl << squareNorms << std::endl;
+						auto pos = state.points.col(i);
+						auto differences = state.points.colwise() - pos;
+						auto squareNorms = differences.colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
 						auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
-						//std::cout << "directions:" << std::endl << directions << std::endl;
 						auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
-						//std::cout << "rejections:" << std::endl << rejections << std::endl;
 						auto rejection = rejections.rowwise().sum();
-						//std::cout << "rejection:" << std::endl << rejection << std::endl;
-						state.translations.col(i) -= 0.001 * rejection.matrix();
-						state.translations.col(i) = 0.01 * project(state.translations.col(i), state.points.col(i));
+						state.translations.col(i) -= 0.1 / sqrt(n) * rejection.matrix();
+						state.translations.col(i) = 0.5 / sqrt(n) * project(state.translations.col(i), state.points.col(i));
 					}
 				});
 			}
