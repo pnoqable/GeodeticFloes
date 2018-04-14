@@ -90,6 +90,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				onResize({ event.size.width, event.size.height });
 			} else if (keyPressed(sf::Keyboard::P)) {
 				state.drawPoints = !state.drawPoints;
+			} else if (keyPressed(sf::Keyboard::Equal)) {
+				int m = state.points.cols();
+				int n = ( sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) ? 10 : 1 )
+				      * ( sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) ? 100 : 1 );
+				state.points.conservativeResize(Eigen::NoChange, m + n);
+				state.points.rightCols(n) = Eigen::Matrix3Xd::Random(3, n);
+				state.points.rightCols(n).colwise().normalize();
+				state.translations.conservativeResize(Eigen::NoChange, m + n);
+				state.translations.rightCols(n).colwise() = Eigen::Vector3d::Zero();
+			} else if (keyPressed(sf::Keyboard::Dash)) {
+				int m = state.points.cols();
+				int n = fmin( m, (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) ? 10 : 1)
+				               * (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) ? 100 : 1) );
+				state.points.conservativeResize(Eigen::NoChange, m - n);
+				state.translations.conservativeResize(Eigen::NoChange, m - n);
 			} else if (event.type == sf::Event::MouseMoved) {
 				auto& pos = event.mouseMove;
 				auto rel = state.mouseMotion({ pos.x, pos.y });
