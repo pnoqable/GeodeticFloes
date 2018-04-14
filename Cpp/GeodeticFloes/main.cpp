@@ -1,5 +1,12 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <thread>
+
+#define _WIN32_WINNT 0x0501 // minimum deployment target (WinXP)
+
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/math/constants/constants.hpp>
 
 #include <windows.h>
 #include <GL/glew.h>
@@ -7,13 +14,7 @@
 #include <SFML/Window.hpp>
 #include <SFML/OpenGL.hpp>
 
-#include <boost/version.hpp>
-#include <boost/date_time.hpp>
-#include <boost/regex.hpp>
-
 #include <Eigen/Dense>
-
-#include <boost/math/constants/constants.hpp>
 
 #undef min // undo somebody's mess with global namespace
 #undef max
@@ -36,7 +37,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		glViewport(0, 0, size.x, size.y);
 		glLoadIdentity();
 		gluPerspective(45, GLdouble(size.x) / size.y, 0.1, 50.0);
-		glTranslatef(0, 0, -5);
+		glTranslatef(0, 0, -3);
 	};
 
 	onResize( window.getSize() );
@@ -72,7 +73,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		}
 	};
 
-	GameState state( 800 );
+	GameState state( 1800 );
 	while (state.running) {
 
 		sf::Event event;
@@ -110,20 +111,34 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			return v - n.dot(v) * n;
 		};
 
-		for (int i = 0; i < state.points.cols(); i++) {
-			auto pos = state.points.array().col(i);
-			auto differences = state.points.array().colwise() - pos;
-			//std::cout << "differences:" << std::endl << differences << std::endl;
-			auto squareNorms = differences.matrix().colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
-			//std::cout << "squareNorms:" << std::endl << squareNorms << std::endl;
-			auto directions = differences.array() / squareNorms.array().replicate<3,1>().sqrt();
-			//std::cout << "directions:" << std::endl << directions << std::endl;
-			auto rejections  = directions.array() / squareNorms.array().replicate<3,1>();
-			//std::cout << "rejections:" << std::endl << rejections << std::endl;
-			auto rejection = rejections.rowwise().sum();
-			//std::cout << "rejection:" << std::endl << rejection << std::endl;
-			state.translations.col(i) -= 0.01 * rejection.matrix();
-			state.translations.col(i) = 0.01 * state.translations.col(i); //  project(state.translations.col(i), state.points.col(i));
+		{
+			int t = std::thread::hardware_concurrency();
+
+			boost::asio::thread_pool worker(t);
+			int n = state.points.cols();
+
+			for (int j=0; j<t; j++) {
+				boost::asio::post(worker, [&, j] {
+					for (int i=n*j/ t; i<n*(j+1)/ t; i++) {
+						//threads.emplace_back( [&,i]{
+						auto pos = state.points.array().col(i);
+						auto differences = state.points.array().colwise() - pos;
+						//std::cout << "differences:" << std::endl << differences << std::endl;
+						auto squareNorms = differences.matrix().colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
+						//std::cout << "squareNorms:" << std::endl << squareNorms << std::endl;
+						auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
+						//std::cout << "directions:" << std::endl << directions << std::endl;
+						auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
+						//std::cout << "rejections:" << std::endl << rejections << std::endl;
+						auto rejection = rejections.rowwise().sum();
+						//std::cout << "rejection:" << std::endl << rejection << std::endl;
+						state.translations.col(i) -= 0.001 * rejection.matrix();
+						state.translations.col(i) = 0.01 * project(state.translations.col(i), state.points.col(i));
+					}
+				});
+			}
+
+			worker.join();
 		}
 
 		state.points += state.translations;
@@ -133,7 +148,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 		if (state.drawPoints) {
 			glEnable(GL_BLEND);
-			glPointSize(5);
+			glPointSize(3);
 			glColor4f(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
 			for (int i = 0; i < state.points.cols(); i++) {
