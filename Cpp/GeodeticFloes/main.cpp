@@ -74,6 +74,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	};
 
 	GameState state( 100 );
+
 	while (state.running) {
 
 		sf::Event event;
@@ -82,6 +83,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				return event.type == sf::Event::KeyPressed
 					&& event.key.code == key;
 			};
+
+			struct OneOfKeysHeld {
+				bool operator()(sf::Keyboard::Key key) {
+					return sf::Keyboard::isKeyPressed(key);
+				};
+				bool operator()(sf::Keyboard::Key key, sf::Keyboard::Key keys...) {
+					return (*this)(key) | (*this)(keys);
+				}
+			};
+
+			static OneOfKeysHeld oneOfKeysHeld;
 
 			if (event.type == sf::Event::Closed ||
 				keyPressed(sf::Keyboard::Escape)) {
@@ -92,8 +104,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				state.drawPoints = !state.drawPoints;
 			} else if (keyPressed(sf::Keyboard::Equal)) {
 				int m = state.points.cols();
-				int n = ( sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) ? 10 : 1 )
-				      * ( sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) ? 100 : 1 );
+				int n = ( oneOfKeysHeld(sf::Keyboard::LShift, sf::Keyboard::RShift) ? 10 : 1 )
+				      * ( oneOfKeysHeld(sf::Keyboard::LControl, sf::Keyboard::RControl) ? 100 : 1 );
 				state.points.conservativeResize(Eigen::NoChange, m + n);
 				state.points.rightCols(n) = Eigen::Matrix3Xd::Random(3, n);
 				state.points.rightCols(n).colwise().normalize();
@@ -101,8 +113,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				state.translations.rightCols(n).colwise() = Eigen::Vector3d::Zero();
 			} else if (keyPressed(sf::Keyboard::Dash)) {
 				int m = state.points.cols();
-				int n = fmin( m, (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) ? 10 : 1)
-				               * (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) ? 100 : 1) );
+				int n = fmin( m, ( oneOfKeysHeld(sf::Keyboard::LShift, sf::Keyboard::RShift) ? 10 : 1)
+				               * ( oneOfKeysHeld(sf::Keyboard::LControl, sf::Keyboard::RControl) ? 100 : 1) );
 				state.points.conservativeResize(Eigen::NoChange, m - n);
 				state.translations.conservativeResize(Eigen::NoChange, m - n);
 			} else if (event.type == sf::Event::MouseMoved) {
@@ -122,7 +134,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			}
 		}
 
-		auto project = [](const auto& v, const auto& n) {
+		static auto project = [](const auto& v, const auto& n) {
 			return v - n.dot(v) * n;
 		};
 
