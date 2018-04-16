@@ -54,7 +54,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	struct GameState {
 		bool running = true;
 		bool drawPoints = true;
-		bool rotate = false;
 
 		Eigen::Matrix3Xd points;
 		Eigen::Matrix3Xd translations;
@@ -70,6 +69,23 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			Eigen::Vector2i result = cur - last;
 			last = cur;
 			return result;
+		}
+
+		void addPoints(int delta) {
+			int count = points.cols();
+
+			if (delta < -count) {
+				delta = -count;
+			}
+
+			points.conservativeResize(Eigen::NoChange, count + delta);
+			translations.conservativeResize(Eigen::NoChange, count + delta);
+
+			if (delta > 0) {
+				points.rightCols(delta) = Eigen::Matrix3Xd::Random(3, delta);
+				points.rightCols(delta).colwise().normalize();
+				translations.rightCols(delta).colwise() = Eigen::Vector3d::Zero();
+			}
 		}
 	};
 
@@ -95,6 +111,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 			static OneOfKeysHeld oneOfKeysHeld;
 
+			static auto getMultiplier = [] {
+				return (oneOfKeysHeld(sf::Keyboard::LShift, sf::Keyboard::RShift) ? 10 : 1)
+				     * (oneOfKeysHeld(sf::Keyboard::LControl, sf::Keyboard::RControl) ? 100 : 1);
+			};
+
 			if (event.type == sf::Event::Closed ||
 				keyPressed(sf::Keyboard::Escape)) {
 				state.running = false;
@@ -103,33 +124,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			} else if (keyPressed(sf::Keyboard::P)) {
 				state.drawPoints = !state.drawPoints;
 			} else if (keyPressed(sf::Keyboard::Equal)) {
-				int m = state.points.cols();
-				int n = ( oneOfKeysHeld(sf::Keyboard::LShift, sf::Keyboard::RShift) ? 10 : 1 )
-				      * ( oneOfKeysHeld(sf::Keyboard::LControl, sf::Keyboard::RControl) ? 100 : 1 );
-				state.points.conservativeResize(Eigen::NoChange, m + n);
-				state.points.rightCols(n) = Eigen::Matrix3Xd::Random(3, n);
-				state.points.rightCols(n).colwise().normalize();
-				state.translations.conservativeResize(Eigen::NoChange, m + n);
-				state.translations.rightCols(n).colwise() = Eigen::Vector3d::Zero();
+				state.addPoints(getMultiplier());
 			} else if (keyPressed(sf::Keyboard::Dash)) {
-				int m = state.points.cols();
-				int n = fmin( m, ( oneOfKeysHeld(sf::Keyboard::LShift, sf::Keyboard::RShift) ? 10 : 1)
-				               * ( oneOfKeysHeld(sf::Keyboard::LControl, sf::Keyboard::RControl) ? 100 : 1) );
-				state.points.conservativeResize(Eigen::NoChange, m - n);
-				state.translations.conservativeResize(Eigen::NoChange, m - n);
+				state.addPoints(-getMultiplier());
 			} else if (event.type == sf::Event::MouseMoved) {
 				auto& pos = event.mouseMove;
 				auto rel = state.mouseMotion({ pos.x, pos.y });
-				if (state.rotate) {
+				if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
 					glRotated(pi / 12 * rel.x(), 0, 1, 0);
-				}
-			} else if (event.type == sf::Event::MouseButtonPressed) {
-				if (event.mouseButton.button == sf::Mouse::Button::Left) {
-					state.rotate = true;
-				}
-			} else if(event.type == sf::Event::MouseButtonReleased) {
-				if (event.mouseButton.button == sf::Mouse::Button::Left) {
-					state.rotate = false;
 				}
 			}
 		}
