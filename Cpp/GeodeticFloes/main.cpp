@@ -171,8 +171,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 		if (state.drawPoints) {
 			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glPointSize(3);
-			glColor4f(0, 0, 1, 0.5);
+			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
 			for (int i = 0; i < state.points.cols(); i++) {
 				glVertex3d(state.points(0,i), state.points(1,i), state.points(2,i));
