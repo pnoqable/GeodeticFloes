@@ -16,6 +16,8 @@
 
 #include <Eigen/Dense>
 
+#include <QuickHull.hpp>
+
 #undef min // undo somebody's mess with global namespace
 #undef max
 
@@ -54,6 +56,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	struct GameState {
 		bool running = true;
 		bool drawPoints = true;
+		bool drawDelaunay = true;
 
 		Eigen::Matrix3Xd points;
 		Eigen::Matrix3Xd translations;
@@ -123,6 +126,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				onResize({ event.size.width, event.size.height });
 			} else if (keyPressed(sf::Keyboard::P)) {
 				state.drawPoints = !state.drawPoints;
+			} else if (keyPressed(sf::Keyboard::D)) {
+				state.drawDelaunay = !state.drawDelaunay;
 			} else if (keyPressed(sf::Keyboard::Equal)) {
 				state.addPoints(getMultiplier());
 			} else if (keyPressed(sf::Keyboard::Dash)) {
@@ -172,11 +177,34 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		if (state.drawPoints) {
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glPointSize(3);
+			glPointSize(5);
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
 			for (int i = 0; i < state.points.cols(); i++) {
 				glVertex3d(state.points(0,i), state.points(1,i), state.points(2,i));
+			}
+			glEnd();
+			glDisable(GL_BLEND);
+		}
+
+		if (state.drawDelaunay) {
+			quickhull::QuickHull<double> qh;
+			const double* pv = state.points.data();
+			int count = state.points.cols();
+			auto hull = qh.getConvexHullAsMesh(pv, count, true);
+
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glColor4d(0, 0, 1, 0.2);
+			glBegin(GL_LINES);
+			for (int i = 0; i < hull.m_halfEdges.size(); i++) {
+				auto& edge = hull.m_halfEdges[i];
+				auto& start = hull.m_vertices[edge.m_endVertex];
+				if (i < edge.m_opp) {
+					auto& opp = hull.m_halfEdges[edge.m_opp];
+					auto& stop = hull.m_vertices[opp.m_endVertex];
+					glVertex3d(start.x, start.y, start.z);
+					glVertex3d(stop.x, stop.y, stop.z);
+				}
 			}
 			glEnd();
 			glDisable(GL_BLEND);
