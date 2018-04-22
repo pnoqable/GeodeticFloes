@@ -61,7 +61,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		Eigen::Matrix3Xd points;
 		Eigen::Matrix3Xd translations;
 
-		GameState( unsigned int numFaces ) {
+		explicit GameState( unsigned int numFaces ) {
 			points = Eigen::Matrix3Xd::Random(3, numFaces);
 			points.colwise().normalize();
 			translations = Eigen::Matrix3Xd::Zero(3, numFaces);
@@ -181,7 +181,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
 			for (int i = 0; i < state.points.cols(); i++) {
-				glVertex3d(state.points(0,i), state.points(1,i), state.points(2,i));
+				glVertex3dv(state.points.col(i).data());
 			}
 			glEnd();
 			glDisable(GL_BLEND);
@@ -202,8 +202,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				if (i < edge.m_opp) {
 					auto& opp = hull.m_halfEdges[edge.m_opp];
 					auto& stop = hull.m_vertices[opp.m_endVertex];
-					glVertex3d(start.x, start.y, start.z);
-					glVertex3d(stop.x, stop.y, stop.z);
+					glVertex3dv(&start.x);
+					glVertex3dv(&stop.x);
 				}
 			}
 			glEnd();
