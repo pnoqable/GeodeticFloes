@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <thread>
+#include <vector>
 
 #define _WIN32_WINNT 0x0501 // minimum deployment target (WinXP)
 
@@ -172,6 +173,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		state.points += state.translations;
 		state.points.colwise().normalize();
 
+		quickhull::QuickHull<double> qh;
+		auto hull = qh.getConvexHullAsMesh(state.points.data(), state.points.cols(), true);
+
+		struct Board {
+			typedef quickhull::HalfEdgeMesh<double, size_t> ConvexHull;
+			typedef std::vector<size_t> Neighbors;
+
+			size_t nodes;
+			std::vector<Neighbors> nbs;
+
+			explicit Board(const ConvexHull& hull) : nodes(hull.m_vertices.size()), nbs(nodes) {
+				for (auto& edge : hull.m_halfEdges) {
+					auto& to = edge.m_endVertex;
+					auto& from = hull.m_halfEdges[edge.m_opp].m_endVertex;
+					nbs[from].push_back(to);
+				}
+				// \todo: sort nbs per node (counterclockwise)
+			}
+		};
+
+		Board board(hull);
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		if (state.drawPoints) {
@@ -188,11 +211,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		}
 
 		if (state.drawDelaunay) {
-			quickhull::QuickHull<double> qh;
-			const double* pv = state.points.data();
-			int count = state.points.cols();
-			auto hull = qh.getConvexHullAsMesh(pv, count, true);
-
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glColor4d(0, 0, 1, 0.2);
 			glBegin(GL_LINES);
