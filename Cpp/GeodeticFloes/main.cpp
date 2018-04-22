@@ -59,12 +59,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		bool drawPoints = true;
 		bool drawDelaunay = true;
 
-		Eigen::Matrix3Xd points;
+		Eigen::Matrix3Xd particles;
 		Eigen::Matrix3Xd translations;
 
 		explicit GameState( unsigned int numFaces ) {
-			points = Eigen::Matrix3Xd::Random(3, numFaces);
-			points.colwise().normalize();
+			particles = Eigen::Matrix3Xd::Random(3, numFaces);
+			particles.colwise().normalize();
 			translations = Eigen::Matrix3Xd::Zero(3, numFaces);
 		}
 
@@ -76,18 +76,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		}
 
 		void addPoints(int delta) {
-			int count = points.cols();
+			int count = particles.cols();
 
 			if (delta < -count) {
 				delta = -count;
 			}
 
-			points.conservativeResize(Eigen::NoChange, count + delta);
+			particles.conservativeResize(Eigen::NoChange, count + delta);
 			translations.conservativeResize(Eigen::NoChange, count + delta);
 
 			if (delta > 0) {
-				points.rightCols(delta) = Eigen::Matrix3Xd::Random(3, delta);
-				points.rightCols(delta).colwise().normalize();
+				particles.rightCols(delta) = Eigen::Matrix3Xd::Random(3, delta);
+				particles.rightCols(delta).colwise().normalize();
 				translations.rightCols(delta).colwise() = Eigen::Vector3d::Zero();
 			}
 		}
@@ -150,19 +150,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			int t = std::thread::hardware_concurrency();
 
 			boost::asio::thread_pool worker(t);
-			int n = state.points.cols();
+			int n = state.particles.cols();
 
 			for (int j=0; j<t; j++) {
 				boost::asio::post(worker, [&, j] {
 					for (int i=n*j/ t; i<n*(j+1)/ t; i++) {
-						auto pos = state.points.col(i);
-						auto differences = state.points.colwise() - pos;
+						auto pos = state.particles.col(i);
+						auto differences = state.particles.colwise() - pos;
 						auto squareNorms = differences.colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
 						auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
 						auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
 						auto rejection = rejections.rowwise().sum();
 						state.translations.col(i) -= 0.1 / sqrt(n) * rejection.matrix();
-						state.translations.col(i) = 0.5 / sqrt(n) * project(state.translations.col(i), state.points.col(i));
+						state.translations.col(i) = 0.5 / sqrt(n) * project(state.translations.col(i), state.particles.col(i));
 					}
 				});
 			}
@@ -170,11 +170,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			worker.join();
 		}
 
-		state.points += state.translations;
-		state.points.colwise().normalize();
+		state.particles += state.translations;
+		state.particles.colwise().normalize();
 
 		quickhull::QuickHull<double> qh;
-		auto hull = qh.getConvexHullAsMesh(state.points.data(), state.points.cols(), true);
+		auto hull = qh.getConvexHullAsMesh(state.particles.data(), state.particles.cols(), true);
 
 		struct Board {
 			typedef quickhull::HalfEdgeMesh<double, size_t> ConvexHull;
@@ -203,8 +203,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glPointSize(5);
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
-			for (int i = 0; i < state.points.cols(); i++) {
-				glVertex3dv(state.points.col(i).data());
+			for (int i = 0; i < state.particles.cols(); i++) {
+				glVertex3dv(state.particles.col(i).data());
 			}
 			glEnd();
 			glDisable(GL_BLEND);
