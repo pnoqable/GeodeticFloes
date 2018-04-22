@@ -178,18 +178,23 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 		struct Board {
 			typedef quickhull::HalfEdgeMesh<double, size_t> ConvexHull;
-			typedef std::vector<size_t> Neighbors;
+			typedef std::vector<int> Neighbors;
 
-			size_t nodes;
-			std::vector<Neighbors> nbs;
+			Eigen::Matrix3Xd nodes;
+			std::vector<Neighbors> neighbors;
 
-			explicit Board(const ConvexHull& hull) : nodes(hull.m_vertices.size()), nbs(nodes) {
+			static Eigen::Map<Eigen::Matrix3Xd> toMatrix3Xd(const ConvexHull& hull) {
+				return{ (double*)&hull.m_vertices[0].x, 3, (int) hull.m_vertices.size() };
+			};
+
+			explicit Board(const ConvexHull& hull) : nodes(toMatrix3Xd(hull)) {
+				neighbors.resize(nodes.cols());
 				for (auto& edge : hull.m_halfEdges) {
 					auto& to = edge.m_endVertex;
 					auto& from = hull.m_halfEdges[edge.m_opp].m_endVertex;
-					nbs[from].push_back(to);
+					neighbors[from].push_back(to);
 				}
-				// \todo: sort nbs per node (counterclockwise)
+				// \todo: sort neighbors per node (counterclockwise)
 			}
 		};
 
@@ -203,8 +208,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glPointSize(5);
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
-			for (int i = 0; i < state.particles.cols(); i++) {
-				glVertex3dv(state.particles.col(i).data());
+			for (int i = 0; i < board.nodes.cols(); i++) {
+				glVertex3dv(board.nodes.col(i).data());
 			}
 			glEnd();
 			glDisable(GL_BLEND);
@@ -214,14 +219,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glColor4d(0, 0, 1, 0.2);
 			glBegin(GL_LINES);
-			for (int i = 0; i < hull.m_halfEdges.size(); i++) {
-				auto& edge = hull.m_halfEdges[i];
-				auto& start = hull.m_vertices[edge.m_endVertex];
-				if (i < edge.m_opp) {
-					auto& opp = hull.m_halfEdges[edge.m_opp];
-					auto& stop = hull.m_vertices[opp.m_endVertex];
-					glVertex3dv(&start.x);
-					glVertex3dv(&stop.x);
+			for (int from = 0; from < board.neighbors.size(); from++) {
+				for (int to : board.neighbors[from]) {
+					if (from < to) {
+						glVertex3dv(board.nodes.col(from).data());
+						glVertex3dv(board.nodes.col(to).data());
+					}
 				}
 			}
 			glEnd();
