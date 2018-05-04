@@ -58,6 +58,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		bool running = true;
 		bool drawPoints = true;
 		bool drawDelaunay = true;
+		bool drawVoronoi = true;
 
 		Eigen::Matrix3Xd particles;
 		Eigen::Matrix3Xd translations;
@@ -129,6 +130,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				state.drawPoints = !state.drawPoints;
 			} else if (keyPressed(sf::Keyboard::D)) {
 				state.drawDelaunay = !state.drawDelaunay;
+			} else if (keyPressed(sf::Keyboard::V)) {
+				state.drawVoronoi = !state.drawVoronoi;
 			} else if (keyPressed(sf::Keyboard::Equal)) {
 				state.addPoints(getMultiplier());
 			} else if (keyPressed(sf::Keyboard::Dash)) {
@@ -183,18 +186,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			Eigen::Matrix3Xd nodes;
 			std::vector<Neighbors> neighbors;
 
+			Eigen::Matrix3Xd vertices;
+
 			static Eigen::Map<Eigen::Matrix3Xd> toMatrix3Xd(const ConvexHull& hull) {
 				return{ (double*)&hull.m_vertices[0].x, 3, (int) hull.m_vertices.size() };
 			};
 
 			explicit Board(const ConvexHull& hull) : nodes(toMatrix3Xd(hull)) {
+
+				// add nodes:
 				neighbors.resize(nodes.cols());
 				for (auto& edge : hull.m_halfEdges) {
 					auto& to = edge.m_endVertex;
 					auto& from = hull.m_halfEdges[edge.m_opp].m_endVertex;
 					neighbors[from].push_back(to);
 				}
-				// \todo: sort neighbors per node (counterclockwise)
+
+				// sort neighbors per node (counterclockwise)
+				// \todo
+
+				// calculate vertices:
+				// \todo parallelize this:
+				int n = nodes.cols() > 3 ? hull.m_faces.size() : 0;
+				vertices = Eigen::Matrix3Xd::Zero(3, n);
+				for (size_t i = 0; i < n; i++) {
+					size_t begin = hull.m_faces[i].m_halfEdgeIndex;
+					bool first = true;
+					for (size_t j = begin; first || j != begin; j = hull.m_halfEdges[j].m_next, first = false) {
+						vertices.col(i) += nodes.col(hull.m_halfEdges[j].m_endVertex);
+					}
+				}
+				vertices.colwise().normalize();
 			}
 		};
 
@@ -226,6 +248,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 						glVertex3dv(board.nodes.col(to).data());
 					}
 				}
+			}
+			glEnd();
+			glDisable(GL_BLEND);
+		}
+
+		if (state.drawVoronoi) {
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glPointSize(5);
+			glColor4d(0, 1, 0, 0.5);
+			glBegin(GL_POINTS);
+			for (int i = 0; i < board.vertices.cols(); i++) {
+				glVertex3dv(board.vertices.col(i).data());
 			}
 			glEnd();
 			glDisable(GL_BLEND);
