@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -183,33 +184,36 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			typedef quickhull::HalfEdgeMesh<double, size_t> ConvexHull;
 			typedef std::vector<int> Neighbors;
 
+			struct Vertex {
+				int id;
+				double angle;
+				Vertex(int id, double angle) : id(id), angle(angle) {}
+				bool operator<(const Vertex& other) const {
+					return angle < other.angle;
+				}
+			};
+			
+			typedef std::vector<Vertex> Face;
+
 			Eigen::Matrix3Xd nodes;
 			std::vector<Neighbors> neighbors;
 
 			Eigen::Matrix3Xd vertices;
+			std::vector<Face> faces;
 
-			static Eigen::Map<Eigen::Matrix3Xd> toMatrix3Xd(const ConvexHull& hull) {
-				return{ (double*)&hull.m_vertices[0].x, 3, (int) hull.m_vertices.size() };
-			};
-
-			explicit Board(const ConvexHull& hull) : nodes(toMatrix3Xd(hull)) {
+			explicit Board(const ConvexHull& hull) {
 
 				// add nodes:
-				neighbors.resize(nodes.cols());
-				for (auto& edge : hull.m_halfEdges) {
-					auto& to = edge.m_endVertex;
-					auto& from = hull.m_halfEdges[edge.m_opp].m_endVertex;
-					neighbors[from].push_back(to);
-				}
+				int nodesCount = hull.m_vertices.size();
+				nodes = Eigen::Map<Eigen::Matrix3Xd>((double*)hull.m_vertices.data(), 3, nodesCount);
 
-				// sort neighbors per node (counterclockwise)
-				// \todo
+				int nodeCount = nodes.cols() > 3 ? nodes.cols() : 0;
+				int vertCount = nodeCount ? hull.m_faces.size() : 0;
 
 				// calculate vertices:
 				// \todo parallelize this:
-				int n = nodes.cols() > 3 ? hull.m_faces.size() : 0;
-				vertices = Eigen::Matrix3Xd::Zero(3, n);
-				for (size_t i = 0; i < n; i++) {
+				vertices = Eigen::Matrix3Xd::Zero(3, vertCount);
+				for (size_t i = 0; i < vertCount; i++) {
 					size_t begin = hull.m_faces[i].m_halfEdgeIndex;
 					bool first = true;
 					for (size_t j = begin; first || j != begin; j = hull.m_halfEdges[j].m_next, first = false) {
@@ -217,6 +221,38 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 					}
 				}
 				vertices.colwise().normalize();
+
+				// set neighbors and face vertices:
+				// \todo parallelize this:
+				neighbors.resize(nodeCount);
+				faces.resize(nodeCount);
+				if (nodeCount) {
+					for (auto& edge : hull.m_halfEdges) {
+						auto& from = edge.m_endVertex;
+						auto& to = hull.m_halfEdges[edge.m_opp].m_endVertex;
+						neighbors[from].push_back(to);
+						faces[from].push_back(Vertex(edge.m_face, 0.));
+					}
+				}
+
+				// sort face vertices counterclockwise
+				// \todo parallelize this:
+				for (int i = 0; i < nodeCount; i++) {
+					auto& vertIDs = faces[i];
+					assert(vertIDs.size() > 2);
+					auto& m = nodes.col(i);
+					auto& f = vertices.col(vertIDs.front().id);
+					auto r = f.cross(m).normalized();
+					auto u = m.cross(r).normalized();
+					for (auto& v : vertIDs) {
+						auto& p = vertices.col(v.id);
+						double x = r.dot(p);
+						double y = u.dot(p);
+						double r = sqrt(x*x + y*y);
+						v.angle = x >= 0 ? acos(y / r) : 2 * pi - acos(y / r);
+					}
+					std::sort(vertIDs.begin(), vertIDs.end());
+				}
 			}
 		};
 
@@ -259,11 +295,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glPointSize(5);
 			glColor4d(0, 1, 0, 0.5);
-			glBegin(GL_POINTS);
-			for (int i = 0; i < board.vertices.cols(); i++) {
-				glVertex3dv(board.vertices.col(i).data());
+			for (auto& face : board.faces) {
+				glBegin(GL_LINE_LOOP);
+				for (auto& node : face) {
+					glVertex3dv(board.vertices.col(node.id).data());
+				}
+				glEnd();
 			}
-			glEnd();
 			glDisable(GL_BLEND);
 		}
 
