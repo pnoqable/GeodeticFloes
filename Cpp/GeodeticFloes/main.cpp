@@ -55,10 +55,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	struct GameState {
 		bool running = true;
-		bool drawPoints = true;
-		bool drawDelaunay = true;
+		bool drawPoints = false;
+		bool drawDelaunay = false;
 		bool drawVoronoi = true;
 
 		Eigen::Matrix3Xd particles;
@@ -261,8 +264,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		if (state.drawPoints) {
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glPointSize(5);
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_POINTS);
@@ -270,13 +271,32 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				glVertex3dv(board.nodes.col(i).data());
 			}
 			glEnd();
-			glDisable(GL_BLEND);
+		}
+
+		if (state.drawVoronoi) {
+			for (auto& face : board.faces) {
+				glBegin(GL_LINE_LOOP);
+				glColor4d(0, 0, 0, 1);
+				for (auto& node : face) {
+					glVertex3dv(board.vertices.col(node.id).data());
+				}
+				glEnd();
+				glBegin(GL_POLYGON);
+				if (face.size() % 2) {
+					glColor4f(0.5, 0.5, 0.5, 1);
+				} else {
+					glColor4f(1, 1, 1, 1);
+				}
+				for (auto& node : face) {
+					glVertex3dv(board.vertices.col(node.id).data());
+				}
+				glEnd();
+			}
 		}
 
 		if (state.drawDelaunay) {
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glColor4d(0, 0, 1, 0.2);
+			glDisable(GL_DEPTH_TEST);
+			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_LINES);
 			for (int from = 0; from < board.neighbors.size(); from++) {
 				for (int to : board.neighbors[from]) {
@@ -287,22 +307,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				}
 			}
 			glEnd();
-			glDisable(GL_BLEND);
-		}
-
-		if (state.drawVoronoi) {
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glPointSize(5);
-			glColor4d(0, 1, 0, 0.5);
-			for (auto& face : board.faces) {
-				glBegin(GL_LINE_LOOP);
-				for (auto& node : face) {
-					glVertex3dv(board.vertices.col(node.id).data());
-				}
-				glEnd();
-			}
-			glDisable(GL_BLEND);
+			glEnable(GL_DEPTH_TEST);
 		}
 
 		window.display();
