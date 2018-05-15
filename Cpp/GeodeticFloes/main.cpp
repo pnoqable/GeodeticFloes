@@ -223,11 +223,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				// \todo parallelize this:
 				vertices = Eigen::Matrix3Xd::Zero(3, vertCount);
 				for (size_t i = 0; i < vertCount; i++) {
-					size_t begin = hull.m_faces[i].m_halfEdgeIndex;
-					bool first = true;
-					for (size_t j = begin; first || j != begin; j = hull.m_halfEdges[j].m_next, first = false) {
-						vertices.col(i) += nodes.col(hull.m_halfEdges[j].m_endVertex);
+					size_t v[3], e = hull.m_faces[i].m_halfEdgeIndex;
+					for (int j=0; j<3; j++) {
+						v[j] = hull.m_halfEdges[e].m_endVertex;
+						e = hull.m_halfEdges[e].m_next;
 					}
+					// next of next of next vertex should be first:
+					assert(e == hull.m_faces[i].m_halfEdgeIndex);
+					auto& a = nodes.col(v[1]) - nodes.col(v[0]);
+					auto& b = nodes.col(v[2]) - nodes.col(v[1]);
+					vertices.col(i) = a.cross(b);
 				}
 				vertices.colwise().normalize();
 
