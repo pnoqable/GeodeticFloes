@@ -60,6 +60,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 	struct GameState {
 		bool running = true;
+		bool updating = false;
 		bool drawPoints = false;
 		bool drawDelaunay = false;
 		bool drawVoronoi = true;
@@ -130,6 +131,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				state.running = false;
 			} else if (event.type == sf::Event::Resized) {
 				onResize({ event.size.width, event.size.height });
+			} else if (keyPressed(sf::Keyboard::Space)) {
+				state.updating = !state.updating;
 			} else if (keyPressed(sf::Keyboard::P)) {
 				state.drawPoints = !state.drawPoints;
 			} else if (keyPressed(sf::Keyboard::D)) {
@@ -153,32 +156,35 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			return v - n.dot(v) * n;
 		};
 
-		{
-			int t = std::thread::hardware_concurrency();
+		if (state.updating) {
+			{
+				int t = std::thread::hardware_concurrency();
 
-			boost::asio::thread_pool worker(t);
-			int n = state.particles.cols();
+				boost::asio::thread_pool worker(t);
+				int n = state.particles.cols();
 
-			for (int j=0; j<t; j++) {
-				boost::asio::post(worker, [&, j] {
-					for (int i=n*j/ t; i<n*(j+1)/ t; i++) {
-						auto pos = state.particles.col(i);
-						auto differences = state.particles.colwise() - pos;
-						auto squareNorms = differences.colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
-						auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
-						auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
-						auto rejection = rejections.rowwise().sum();
-						state.translations.col(i) -= 0.1 / sqrt(n) * rejection.matrix();
-						state.translations.col(i) = 0.5 / sqrt(n) * project(state.translations.col(i), state.particles.col(i));
-					}
-				});
+				for (int j = 0; j<t; j++) {
+					boost::asio::post(worker, [&, j] {
+						for (int i = n*j / t; i<n*(j + 1) / t; i++) {
+							auto pos = state.particles.col(i);
+							auto differences = state.particles.colwise() - pos;
+							auto squareNorms = differences.colwise().squaredNorm().unaryExpr([](float x) { return x ? x : 1; });
+							auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
+							auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
+							auto rejection = rejections.rowwise().sum();
+							state.translations.col(i) -= 0.1 / sqrt(n) * rejection.matrix();
+							state.translations.col(i) = 0.5 / sqrt(n) * project(state.translations.col(i), state.particles.col(i));
+						}
+					});
+				}
+
+				worker.join();
 			}
 
-			worker.join();
-		}
+			state.particles += state.translations;
+			state.particles.colwise().normalize();
 
-		state.particles += state.translations;
-		state.particles.colwise().normalize();
+		}
 
 		quickhull::QuickHull<double> qh;
 		auto hull = qh.getConvexHullAsMesh(state.particles.data(), state.particles.cols(), true);
