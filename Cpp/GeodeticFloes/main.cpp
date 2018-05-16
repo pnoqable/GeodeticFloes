@@ -64,6 +64,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 		bool drawPoints = false;
 		bool drawDelaunay = false;
 		bool drawVoronoi = true;
+		bool occludeLines = true;
 
 		Eigen::Matrix3Xd particles;
 		Eigen::Matrix3Xd translations;
@@ -139,6 +140,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 				state.drawDelaunay = !state.drawDelaunay;
 			} else if (keyPressed(sf::Keyboard::V)) {
 				state.drawVoronoi = !state.drawVoronoi;
+			} else if (keyPressed(sf::Keyboard::O)) {
+				state.occludeLines = !state.occludeLines;
 			} else if (keyPressed(sf::Keyboard::Equal)) {
 				state.addPoints(getMultiplier());
 			} else if (keyPressed(sf::Keyboard::Dash)) {
@@ -292,6 +295,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 					glVertex3dv(board.vertices.col(node.id).data());
 				}
 				glEnd();
+				glScaled(0.999, 0.999, 0.999);
 				glBegin(GL_POLYGON);
 				if (face.size() % 2) {
 					glColor4f(0.5, 0.5, 0.5, 1);
@@ -302,11 +306,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 					glVertex3dv(board.vertices.col(node.id).data());
 				}
 				glEnd();
+				glScaled(1. / 0.999, 1. / 0.999, 1. / 0.999);
 			}
 		}
 
 		if (state.drawDelaunay) {
-			glDisable(GL_DEPTH_TEST);
+			if (!state.occludeLines) {
+				glDisable(GL_DEPTH_TEST);
+			}
 			glColor4d(0, 0, 1, 0.5);
 			glBegin(GL_LINES);
 			for (int from = 0; from < board.neighbors.size(); from++) {
