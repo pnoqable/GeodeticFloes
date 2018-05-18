@@ -18,7 +18,7 @@
     <ClCompile Include="main.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\quickhull\QuickHull.cpp">
+    <ClCompile Include="..\Dependencies\quickhull\QuickHull.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>

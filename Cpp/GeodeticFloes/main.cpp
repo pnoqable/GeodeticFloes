@@ -11,7 +11,8 @@
 #include <boost/math/constants/constants.hpp>
 
 #include <windows.h>
-#include <GL/glew.h>
+//#include <GL/glew.h>
+#include <gl/GLU.h>
 
 #include <SFML/Window.hpp>
 #include <SFML/OpenGL.hpp>
@@ -46,10 +47,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 	onResize( window.getSize() );
 
-	GLenum err = glewInit();
-	if (GLEW_OK != err) {
-		std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
-	}
+	//GLenum err = glewInit();
+	//if (GLEW_OK != err) {
+	//	std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
+	//}
 
 	glClearColor(0.0, 0.5, 0.5, 1.0);
 	glEnable(GL_DEPTH_TEST);
