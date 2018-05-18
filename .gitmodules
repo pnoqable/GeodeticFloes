@@ -1,0 +1,15 @@
+[submodule "Cpp/Dependencies/boost"]
+	path = Cpp/Dependencies/boost
+	url = https://github.com/boostorg/boost.git
+[submodule "Cpp/Dependencies/sfml"]
+	path = Cpp/Dependencies/sfml
+	url = https://github.com/SFML/SFML.git
+[submodule "Cpp/Dependencies/eigen"]
+	path = Cpp/Dependencies/eigen
+	url = https://github.com/eigenteam/eigen-git-mirror.git
+[submodule "Cpp/Dependencies/quickhull"]
+	path = Cpp/Dependencies/quickhull
+	url = https://github.com/akuukka/quickhull.git
+[submodule "Cpp/Dependencies/glew"]
+	path = Cpp/Dependencies/glew
+	url = https://github.com/nigels-com/glew.git
