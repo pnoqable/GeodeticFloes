@@ -1,0 +1,36 @@
+#!python
+
+mode = ARGUMENTS.get( 'mode', 'release' )
+
+ccFlags = { 'debug'   : [ '/MDd', '/Od', '/Zi', '/Fd${TARGET}.pdb' ],
+            'release' : [ '/MD', '/Ox' ] }
+
+linkFlags = { 'debug'   : [ '/DEBUG' ],
+              'release' : [] }
+
+libs = { 'debug'   : [ 'sfml-system-d', 'sfml-window-d', 'sfml-graphics-d', 'sfml-network-d', 'sfml-audio-d' ],
+         'release' : [ 'sfml-system', 'sfml-window', 'sfml-graphics', 'sfml-network', 'sfml-audio' ] }
+
+env = Environment( MSVC_VERSION='14.0', TARGET_ARCH = 'x86' )
+
+env.Append( CCFLAGS = [ '/EHsc', '/D_WIN32_WINNT=0x0501' ] + ccFlags[mode] )
+
+env.Append( CPPPATH = [ 'C:\\Users\\lhaeussler\\devel\\quickhull',
+                        'C:\\Users\\lhaeussler\\devel\\eigen',
+					    'C:\\Users\\lhaeussler\\devel\\boost',
+						'C:\\Users\\lhaeussler\\devel\\glew-2.1.0\\include',
+						'C:\\Users\\lhaeussler\\devel\\SFML-2.4.2-vc++14-32bit\\include' ] )
+
+env.Append( LINKFLAGS = linkFlags[mode] )
+
+env.Append( LIBPATH = [ 'C:\\Users\\lhaeussler\\devel\\boost\\stage\\lib',
+                        'C:\\Users\\lhaeussler\\devel\\glew-2.1.0\\lib\\Release\\Win32',
+						'C:\\Users\\lhaeussler\\devel\\SFML-2.4.2-vc++14-32bit\\lib' ] )
+
+env.Append( LIBS = [ 'opengl32', 'glu32', 'glew32' ] + libs[mode] )
+
+path = 'GeodeticFloes/' + mode.capitalize() + '/'
+
+quickHull = env.Object( source = 'C:\\Users\\lhaeussler\\devel\\quickhull\\QuickHull.cpp' )
+
+env.Program( path + 'main', [ 'GeodeticFloes/main.cpp', quickHull ] )
