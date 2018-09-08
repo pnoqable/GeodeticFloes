@@ -33,4 +33,8 @@ path = 'GeodeticFloes/' + mode.capitalize() + '/'
 
 quickHull = env.Object( source = 'C:\\Users\\lhaeussler\\devel\\quickhull\\QuickHull.cpp' )
 
-env.Program( path + 'main', [ 'GeodeticFloes/main.cpp', quickHull ] )
+dynamicBoard = env.Object( [
+    'GeodeticFloes/DynamicBoardData.cpp', 
+    'GeodeticFloes/DynamicBoard.cpp' ] )
+
+env.Program( path + 'main', [ 'GeodeticFloes/main.cpp', dynamicBoard, quickHull ] )
