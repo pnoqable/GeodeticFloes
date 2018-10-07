@@ -92,6 +92,10 @@ void DynamicBoard::updateGeometryIfNeeded() {
 	}
 }
 
+void DynamicBoard::writeStatisticsOnce() {
+	data->writeStats = true;
+}
+
 void DynamicBoard::throwIfUpdateNeeded() const {
 	if( needsUpdate ) {
 		throw "data is outdated -> call updateGeometrie() first";

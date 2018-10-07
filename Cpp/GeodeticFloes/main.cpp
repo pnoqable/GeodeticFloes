@@ -110,6 +110,8 @@ int WINAPI wWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLin
 				state.board.addFaces( getMultiplier() );
 			} else if( keyPressed( sf::Keyboard::Dash ) ) {
 				state.board.addFaces( -getMultiplier() );
+			} else if( keyPressed( sf::Keyboard::S ) ) {
+				state.board.writeStatisticsOnce();
 			} else if( event.type == sf::Event::MouseMoved ) {
 				auto rel = state.mouseMotion( event.mouseMove );
 				if( sf::Mouse::isButtonPressed( sf::Mouse::Button::Left ) ) {

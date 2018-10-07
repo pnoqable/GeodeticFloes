@@ -10,7 +10,8 @@ const double pi = boost::math::constants::pi<double>();
 
 DynamicBoardData::DynamicBoardData( int nodeCount ) :
 	threadCount( std::thread::hardware_concurrency() ),
-	workers( threadCount )
+	workers( threadCount ),
+	writeStats( false )
 {
 	nodes = Eigen::Matrix3Xd::Random( 3, nodeCount );
 	nodes.colwise().normalize();
@@ -69,20 +70,61 @@ void DynamicBoardData::updateParallel( int n, std::function< void( int, int ) > 
 
 Eigen::Vector3d project( const Eigen::Vector3d& v, const Eigen::Vector3d& n ) {
 	return v - n.dot( v ) * n;
+}
+
+struct Statistics {
+
+	std::vector<std::stringstream> stats;
+	DynamicBoardData& data;
+
+	Statistics( DynamicBoardData& data ) :
+		data( data )
+	{
+		if( data.writeStats ) {
+			stats.resize( data.nodes.cols() );
+			data.writeStats = false;
+		}
+	}
+	
+	void addIfEnabled( int i, 
+		const Eigen::Vector3d& pos,
+		const Eigen::Matrix3Xd& rejections,
+		const Eigen::RowVectorXd& norms )
+	{
+		if( i < stats.size() ) {
+			auto& ss = stats[i];
+
+			Eigen::RowVectorXd rejectionsNorm = Eigen::RowVectorXd::Zero( stats.size() );
+			for( int j = 0; j < stats.size(); j++ ) {
+				rejectionsNorm( 0, j ) = project( rejections.col( j ), pos ).norm();
+			}
+
+			ss << " " << rejectionsNorm << " | " << norms << std::endl;
+		}
+	}
+
+	~Statistics() {
+		for( auto& stream : stats ) {
+			std::cout << stream.str();
+		}
+	}
 };
 
 void DynamicBoardData::updateDispersion() {
+	Statistics stats( *this );
 	const int n = nodes.cols();
-	updateParallel( n, [this, n]( int min, int max ) {
+	updateParallel( n, [this, n, &stats]( int min, int max ) {
 		for( int i = min; i < max; i++ ) {
 			auto pos = nodes.col( i );
 			auto differences = nodes.colwise() - pos;
 			auto squareNorms = differences.colwise().squaredNorm().unaryExpr([]( float x ) { return x ? x : 1; });
-			auto directions = differences.array() / squareNorms.array().replicate<3, 1>().sqrt();
+			auto norms = squareNorms.array().sqrt();
+			auto directions = differences.array() / norms.replicate<3, 1>();
 			auto rejections = directions.array() / squareNorms.array().replicate<3, 1>();
 			auto rejection = rejections.rowwise().sum();
 			nextStep.col( i ) -= 0.1 / sqrt( n ) * rejection.matrix();
-			nextStep.col( i ) = 0.5 / sqrt( n ) * project(nextStep.col( i ), nodes.col( i ));
+			nextStep.col( i ) = 0.5 / sqrt( n ) * project( nextStep.col( i ), nodes.col( i ) );
+			stats.addIfEnabled( i, nodes.col( i ), rejections, norms );
 		}
 	} );
 	updateParallel( nodes.cols(), [this]( int min, int max ) {

@@ -37,6 +37,10 @@ struct DynamicBoardData
 
 	quickhull::QuickHull<double> qh;
 
+	// debug stuff:
+
+	bool writeStats;
+
 	// methods:
 
 	explicit DynamicBoardData( int nodeCount );

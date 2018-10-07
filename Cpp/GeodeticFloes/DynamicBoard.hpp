@@ -63,6 +63,9 @@ public:
 	// calculate vertices, borders and faces according to current node
 	void updateGeometryIfNeeded();
 
+	// write current dispersion and geometrie values on next update
+	void writeStatisticsOnce();
+
 private:
 
 	void throwIfUpdateNeeded() const;
