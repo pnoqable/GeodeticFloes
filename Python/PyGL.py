@@ -29,7 +29,9 @@ svVerticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
 glEnableClientState( GL_VERTEX_ARRAY )
 
 class GameState:
-    resolution = ( 0, 0 )
+    resolution  = None
+    clickPos    = None
+    selection   = None
 
     distance    = 5
     longitude   = 0
@@ -62,7 +64,9 @@ while state.running:
         elif e.type == pygame.VIDEORESIZE:
             state.resolution = ( e.w, e.h )
             glViewport( 0, 0, e.w, e.h )
-        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][0]:
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 1:
+            state.clickPos = e.pos
+        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][1]:
             state.longitude += np.pi / 12 * e.dict['rel'][0]
             state.latitude  += np.pi / 12 * e.dict['rel'][1]
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 4:
@@ -79,6 +83,8 @@ while state.running:
             if count > 0:
                 vertices = vertices[:-count]
                 translations = translations[:-count]
+            if state.selection != None and state.selection >= vertices.shape[0]:
+                state.selection = None
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'p':
             state.points = not state.points
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'd':
@@ -138,29 +144,31 @@ while state.running:
     glRotate( state.latitude, 1, 0, 0 )
     glRotate( state.longitude, 0, 1, 0 )
 
-    verticesBO.set_array( vertices )
-    
-    factor = 1.02
-    glScalef( factor, factor, factor )
-            
-    if state.points:
-        with verticesBO:
-            glPointSize( 5 )
-            glColor4f( 0, 0, 1, 0.5 )
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
+    modelView = glGetFloatv( GL_MODELVIEW_MATRIX )
+    projection = glGetFloatv( GL_PROJECTION_MATRIX )
+    viewport = glGetIntegerv( GL_VIEWPORT )
 
-    if state.delauney:
-        with verticesBO:
-            glColor4f( 0, 0, 1, 0.2 )   
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            for simplex in hull.simplices:
-                glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
-    
-    factor = 1 / factor
-    glScalef( factor, factor, factor )
+    if state.clickPos != None:
+        worldNear = gluUnProject( state.clickPos[0], state.resolution[1] - state.clickPos[1], 0 )
+        worldRear = gluUnProject( state.clickPos[0], state.resolution[1] - state.clickPos[1], 1 )
+        state.clickPos = None
 
-    svVerticesBO.set_array( np.array( sv.vertices, dtype='float32' ) )
+        p = np.array( worldNear, dtype = 'float32' )[:3]
+        d = np.array( worldRear, dtype = 'float32' )[:3] - p
+        d /= np.linalg.norm( d )
+        
+        term0 = - ( d * p ).sum()
+        term1 = 1 + np.square( term0 ) - np.square( p ).sum()
+
+        if term1 >= 0:
+            interception = p + d * ( term0 - np.sqrt( term1 ) )
+            products = ( vertices * interception ).sum( axis = 1 )
+            state.selection = products.argmax()
+            state.selection = state.selection
+        else:
+            state.selection = None
+
+    svVerticesBO.set_array( np.array( sv.vertices, dtype = 'float32' ) )
                 
     if state.voronoi:      
         with svVerticesBO:
@@ -168,6 +176,10 @@ while state.running:
             for region in sv.regions:
                 brightness = 1 - 0.1 * ( len( region ) - 3 )
                 glColor4f( brightness, brightness, brightness, 1 )
+                glDrawElements( GL_POLYGON, len( region ), GL_UNSIGNED_INT, region )
+            if state.selection != None:
+                glColor4f( 1, 0, 0, 0.1 )
+                region = sv.regions[ state.selection ]
                 glDrawElements( GL_POLYGON, len( region ), GL_UNSIGNED_INT, region )
 
     factor = 1.002
@@ -179,6 +191,36 @@ while state.running:
             glVertexPointer( 3, GL_FLOAT, 0, svVerticesBO )
             for region in sv.regions:
                 glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
+            if state.selection != None:
+                glColor4f( 1, 0, 0, 1 )
+                region = sv.regions[ state.selection ]
+                glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
+    
+    factor = 1 / factor
+    glScalef( factor, factor, factor )
+
+    verticesBO.set_array( vertices )
+    
+    factor = 1.02
+    glScalef( factor, factor, factor )
+            
+    if state.points:
+        with verticesBO:
+            glPointSize( 5 )
+            glColor4f( 0, 0, 1, 0.5 )
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
+            if state.selection != None:
+                glColor4f( 1, 0, 0, 1 )
+                glDrawArrays( GL_POINTS, state.selection, 1 )
+
+
+    if state.delauney:
+        with verticesBO:
+            glColor4f( 0, 0, 1, 0.2 )   
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            for simplex in hull.simplices:
+                glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
     
     factor = 1 / factor
     glScalef( factor, factor, factor )
