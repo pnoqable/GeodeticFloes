@@ -1,11 +1,10 @@
+import numpy as np
+from scipy.spatial import SphericalVoronoi
+
 import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.arrays import vbo
-from ctypes import *
-import numpy as np
-from scipy.spatial import *
-from concurrent.futures import *
 
 pygame.init()
 screen = pygame.display.set_mode( ( 800, 600 ), pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF, 24 )
@@ -184,8 +183,8 @@ while state.running:
 
     vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
     
-    hull = ConvexHull( vertices )
     sv = SphericalVoronoi( vertices )
+    hull = sv._tri
     sv.sort_vertices_of_regions()
 
     glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT )
