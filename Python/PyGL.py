@@ -5,12 +5,13 @@ import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.arrays import vbo
+import itertools as it
 
 pygame.init()
 screen = pygame.display.set_mode( ( 800, 600 ), pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF, 24 )
 
 np.random.seed()
-vertices = np.random.sample( ( 169, 3 ) ).astype( 'float32' ) - 0.5
+vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
 vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
@@ -24,7 +25,6 @@ glEnable( GL_BLEND )
 glPolygonMode( GL_FRONT,  GL_FILL )
 
 verticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
-svVerticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
 glEnableClientState( GL_VERTEX_ARRAY )
 
 vtxShader = glCreateShader( GL_VERTEX_SHADER )
@@ -39,8 +39,12 @@ glShaderSource( vtxShader, """
 """)
 glCompileShader( vtxShader )
 
-geoShader = glCreateShader( GL_GEOMETRY_SHADER )
-glShaderSource( geoShader, """
+if glGetShaderiv( vtxShader, GL_COMPILE_STATUS ) != GL_TRUE:
+    message = glGetShaderInfoLog( vtxShader )
+    raise RuntimeError( message )
+
+lineShader = glCreateShader( GL_GEOMETRY_SHADER )
+glShaderSource( lineShader, """
 
     layout( lines ) in;
     layout( line_strip, max_vertices = 9 ) out;
@@ -50,8 +54,8 @@ glShaderSource( geoShader, """
     void main()
     {
         for( int i = 0; i <= lines; i++) {
-            float a = 1. * i / lines;
-            float b = 1. - a;
+            float b = 1. * i / lines;
+            float a = 1. - b;
 
             vec4 middle = a * gl_in[0].gl_Position + b * gl_in[1].gl_Position;
             vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
@@ -65,19 +69,75 @@ glShaderSource( geoShader, """
         EndPrimitive();
     }
 """ )
-glCompileShader( geoShader )
+glCompileShader( lineShader )
 
-if glGetShaderiv( geoShader, GL_COMPILE_STATUS ) != GL_TRUE:
-    message = glGetShaderInfoLog( geoShader )
+if glGetShaderiv( lineShader, GL_COMPILE_STATUS ) != GL_TRUE:
+    message = glGetShaderInfoLog( lineShader )
     raise RuntimeError( message )
 
-shaderProgram = glCreateProgram()
-glAttachShader( shaderProgram, vtxShader )
-glAttachShader( shaderProgram, geoShader )
-glLinkProgram( shaderProgram )
+shaderProgramLines = glCreateProgram()
+glAttachShader( shaderProgramLines, vtxShader )
+glAttachShader( shaderProgramLines, lineShader )
+glLinkProgram( shaderProgramLines )
 
-if glGetProgramiv( shaderProgram, GL_LINK_STATUS ) != GL_TRUE:
-    message = glGetProgramInfoLog( shaderProgram )
+if glGetProgramiv( shaderProgramLines, GL_LINK_STATUS ) != GL_TRUE:
+    message = glGetProgramInfoLog( shaderProgramLines )
+    raise RuntimeError( message )
+
+triShader = glCreateShader( GL_GEOMETRY_SHADER )
+glShaderSource( triShader, """
+
+    layout( triangles ) in;
+    layout( triangle_strip, max_vertices = 27 ) out;
+
+    const int lines = 8;
+
+    void main()
+    {
+        vec4 lastPos = gl_in[1].gl_Position;
+        vec4 lastCol = gl_in[1].gl_FrontColor;
+
+        for( int i = 1; i <= lines; i++) {
+            gl_Position = gl_in[0].gl_Position;
+            gl_FrontColor = gl_in[0].gl_FrontColor;
+            EmitVertex();
+
+            gl_Position = lastPos;
+            gl_FrontColor = lastCol;
+            EmitVertex();
+
+            float b = 1. * i / lines;
+            float a = 1. - b;
+
+            vec4 middle = a * gl_in[1].gl_Position + b * gl_in[2].gl_Position;
+            vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
+
+            middleWorld.xyz = normalize( middleWorld.xyz );
+
+            lastPos = gl_ModelViewProjectionMatrix * middleWorld;  // middle;
+            lastCol = a * gl_in[1].gl_FrontColor + b * gl_in[2].gl_FrontColor;
+
+            gl_Position = lastPos;
+            gl_FrontColor = lastCol;
+            EmitVertex();
+            
+            EndPrimitive();
+        }
+    }
+""" )
+glCompileShader( triShader )
+
+if glGetShaderiv( triShader, GL_COMPILE_STATUS ) != GL_TRUE:
+    message = glGetShaderInfoLog( triShader )
+    raise RuntimeError( message )
+
+shaderProgramTris = glCreateProgram()
+glAttachShader( shaderProgramTris, vtxShader )
+glAttachShader( shaderProgramTris, triShader )
+glLinkProgram( shaderProgramTris )
+
+if glGetProgramiv( shaderProgramTris, GL_LINK_STATUS ) != GL_TRUE:
+    message = glGetProgramInfoLog( shaderProgramTris )
     raise RuntimeError( message )
 
 class GameState:
@@ -90,11 +150,13 @@ class GameState:
     latitude    = 0
 
     running     = True
-    points      = True
-    delauney    = True
+    points      = False
+    delauney    = False
     voronoi     = True
     borders     = True
     dmin        = 2.
+
+    shader      = True
 
     repulsion   = 0.00005
     deccelerate = 0
@@ -145,6 +207,8 @@ while state.running:
             state.voronoi = not state.voronoi
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'b':
             state.borders = not state.borders
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 's':
+            state.shader = not state.shader
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 32: # ' '
             state.deccelerate = 0.2 * pow( 10, mod ) * pow( -1, mod2 )
         elif e.type == pygame.KEYUP and e.dict['key'] == 32: # ' '
@@ -219,10 +283,11 @@ while state.running:
             state.selection = state.selection
         else:
             state.selection = None
-                
-    selectedRegion = sv.regions[ state.selection ] if state.selection != None else None
 
-    verticesBO.set_array( vertices )
+    factor = 1.002
+    glScalef( factor, factor, factor )
+
+    verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
     
     if state.points:
         with verticesBO:
@@ -233,50 +298,58 @@ while state.running:
             if state.selection != None:
                 glColor4f( 1, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
+                
+    glUseProgram( shaderProgramLines if state.shader else 0 )
 
     if state.delauney:
         with verticesBO:
-            glUseProgram( shaderProgram )
             glColor4f( 0, 0, 1, 0.2 )
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             for simplex in hull.simplices:
                 glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
-            glUseProgram( 0 )
-
-    svVerticesBO.set_array( np.array( sv.vertices, dtype = 'float32' ) )
-
-    factor = 1.002
-    glScalef( factor, factor, factor )
+    
+    regions = [np.array(region) + vertices.shape[0] for region in sv.regions]
+    selectedRegion = regions[ state.selection ] if state.selection is not None else None
     
     if state.borders:
-        with svVerticesBO:
+        with verticesBO:
             glColor4f( 0, 0, 0, 0.2 )
-            glVertexPointer( 3, GL_FLOAT, 0, svVerticesBO )
-            for region in sv.regions:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            for region in regions:
                 glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
                 
-    if selectedRegion != None:
-        with svVerticesBO:
+    if selectedRegion is not None:
+        with verticesBO:
             glColor4f( 1, 0, 0, 1 )
-            glVertexPointer( 3, GL_FLOAT, 0, svVerticesBO )
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glDrawElements( GL_LINE_LOOP, len( selectedRegion ), GL_UNSIGNED_INT, selectedRegion )
     
     factor = 1 / factor
     glScalef( factor, factor, factor )
+
+    faces = [ np.concatenate( ( [index], region, [region[0]] ) ).astype( 'uint32' ) for ( index, region ) in zip( it.count(), regions )]
+    selectedFace = faces[ state.selection ] if state.selection is not None else None
+    
+    glUseProgram( shaderProgramTris if state.shader else 0 )
                 
-    if state.voronoi:      
-        with svVerticesBO:
-            glVertexPointer( 3, GL_FLOAT, 0, svVerticesBO )
-            for region in sv.regions:
-                brightness = 1 - 0.1 * ( len( region ) - 3 )
+    if state.voronoi:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            for face in faces:
+                brightness = 1 - 0.1 * ( face.shape[0] - 5 )
                 glColor4f( brightness, brightness, brightness, 1 )
-                glDrawElements( GL_POLYGON, len( region ), GL_UNSIGNED_INT, region )
+                if not state.shader:
+                    face = face[1:]
+                glDrawElements( GL_TRIANGLE_FAN, face.shape[0], GL_UNSIGNED_INT, face )
                 
-    if selectedRegion != None:
-        with svVerticesBO:
+    if selectedFace is not None:
+        with verticesBO:
             glColor4f( 1, 0, 0, 0.2 )
-            glVertexPointer( 3, GL_FLOAT, 0, svVerticesBO )
-            glDrawElements( GL_POLYGON, len( selectedRegion ), GL_UNSIGNED_INT, selectedRegion )
+            if not state.shader:
+                selectedFace = selectedFace[1:]
+            glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
+
+    glUseProgram( 0 )
 
     glMatrixMode( GL_PROJECTION )
     glPushMatrix()
