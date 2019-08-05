@@ -142,24 +142,31 @@ if glGetProgramiv( shaderProgramTris, GL_LINK_STATUS ) != GL_TRUE:
 
 class GameState:
     resolution  = None
-    clickPos    = None
+
     selection   = None
 
-    distance    = 3
-    longitude   = 0
-    latitude    = 0
+    idsToRemove = None
+    pointsToAdd = None
+
+    distance    = 3.
+    longitude   = 0.
+    latitude    = 0.
 
     running     = True
-    points      = False
+    points      = True
     delauney    = False
     voronoi     = True
     borders     = True
-    dmin        = 2.
 
     shader      = True
 
+    freeze      = True
+
     repulsion   = 0.00005
-    deccelerate = 0
+    deccelerate = 0.
+    
+    dmin        = 2.
+    temperature = 0.
 
     def resetStats(self):
         self.dmin = 2.
@@ -167,6 +174,30 @@ class GameState:
 state = GameState()
 
 while state.running:
+
+    def unprojectToSphereNear( screenPos ):
+        worldNear = gluUnProject( screenPos[0], state.resolution[1] - screenPos[1], 0 )
+        worldRear = gluUnProject( screenPos[0], state.resolution[1] - screenPos[1], 1 )
+
+        p = np.array( worldNear, dtype = 'float32' )[:3]
+        d = np.array( worldRear, dtype = 'float32' )[:3] - p
+        d /= np.linalg.norm( d )
+        
+        term0 = np.dot( d, p )
+        term1 = 1 + np.square( term0 ) - np.square( p ).sum()
+
+        if term1 >= 0:
+            sqrtTerm1 = np.sqrt( term1 )
+
+            projection0 = term0 + sqrtTerm1
+            if 0 > projection0:
+                return p - d * projection0
+
+            projection1 = term0 - sqrtTerm1
+            if 0 > projection1:
+                return p - d * projection1
+        
+        return None
 
     for e in pygame.event.get():
         # print( e.type, e.dict )
@@ -179,26 +210,32 @@ while state.running:
             state.resolution = ( e.w, e.h )
             glViewport( 0, 0, e.w, e.h )
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 1:
-            state.clickPos = e.pos
+            interception = unprojectToSphereNear( e.pos )
+            if interception is not None:
+                state.selection = np.dot( vertices, interception ).argmax()
+            else:
+                state.selection = None
+        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][0]:
+            interception = unprojectToSphereNear( e.pos )
+            if interception is not None and state.selection is not None:
+                vertices[state.selection] = interception / np.linalg.norm( interception )
+                translations[state.selection] = 0
         elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][1]:
             state.longitude += np.pi / 12 * e.dict['rel'][0]
             state.latitude  += np.pi / 12 * e.dict['rel'][1]
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 4:
-            state.distance += 0.5
+            state.distance *= 1.1
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 5:
-            state.distance -= 0.5
+            state.distance /= 1.1
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 93: # '+'
-            count = 1 * pow( 10, mod ) * pow( 100, mod2 )
-            vertices = np.append( vertices, np.random.sample( ( count, 3 ) ).astype( 'float32' ) - 0.5, axis = 0 )
-            translations = np.append( translations, np.zeros( ( count, 3 ), dtype = 'float32' ), axis = 0 )
+            count = pow( 10, mod ) * pow( 100, mod2 )
+            state.pointsToAdd = np.random.sample( ( count, 3 ) ).astype( 'float32' ) - 0.5
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 47: # '-'
-            count = 1 * pow( 10, mod ) * pow( 100, mod2 )
-            count = min( vertices.shape[0] - 4, count )
-            if count > 0:
-                vertices = vertices[:-count]
-                translations = translations[:-count]
-            if state.selection != None and state.selection >= vertices.shape[0]:
-                state.selection = None
+            count = min( pow( 10, mod ) * pow( 100, mod2 ), vertices.shape[0] - 4 )
+            state.idsToRemove = vertices.shape[0] - count + np.arange( count )
+        elif e.type == pygame.KEYDOWN and e.dict['key'] == 127: # DEL
+            if state.selection is not None and vertices.shape[0] > 4:
+                state.idsToRemove = [state.selection]
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'p':
             state.points = not state.points
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'd':
@@ -209,47 +246,56 @@ while state.running:
             state.borders = not state.borders
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 's':
             state.shader = not state.shader
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'f':
+            state.freeze = not state.freeze
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 32: # ' '
             state.deccelerate = 0.2 * pow( 10, mod ) * pow( -1, mod2 )
+            state.freeze = False
         elif e.type == pygame.KEYUP and e.dict['key'] == 32: # ' '
             state.deccelerate = 0
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 114: # 'r'
-            state.repulsion = round( state.repulsion - 0.000001 * pow( 10, mod ) * pow( -1, mod2 ), 6 )
+            state.repulsion -= 0.000001 * pow( 10, mod ) * pow( -1, mod2 )
+            state.repulsion = max( 0, round( state.repulsion, 6 ) )
 
-    state.resetStats()
+    if state.idsToRemove is not None:
+        vertices = np.delete( vertices, state.idsToRemove, axis = 0 )
+        translations = np.delete( translations, state.idsToRemove, axis = 0 )
+        if state.selection in state.idsToRemove:
+            state.selection = None
+        state.idsToRemove = None
 
-    def calcRejectionFor( i ):
-        diffs = vertices[i] - vertices
-        distsSquared = np.square( diffs ).sum( axis = 1 )
-        # mask = distsSquared < 0.1
-        # diffs = diffs[mask]
-        # distsSquared = distsSquared[mask]
-        dists = np.sqrt( distsSquared )
-        directions = diffs / dists[:,np.newaxis]
-        rejections = directions / distsSquared[:,np.newaxis]
-        rejection = np.nansum( rejections, axis = 0 )
-        state.dmin = min( state.dmin, np.min( dists[dists>0] ) )
-        return rejection
-
-    translationsSquared = np.square( translations ).sum( axis = 1 )
-    translations *= np.power( np.e, -10*translationsSquared )[:,np.newaxis]
-
-    for i in range( vertices.shape[0] ):
-        translations[i] += state.repulsion * calcRejectionFor( i )
-
-    projection = ( vertices * translations ).sum( axis = 1 )
-    translations -= vertices * projection[:,np.newaxis]
-
-    if state.deccelerate:
-        translations *= pow( np.e, -state.deccelerate )
-
-    vertices += translations
-
-    vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+    if state.pointsToAdd is not None:
+        state.pointsToAdd /= np.linalg.norm( state.pointsToAdd, axis=1 )[:,np.newaxis]
+        vertices = np.append( vertices, state.pointsToAdd, axis = 0 )
+        translations = np.append( translations, np.zeros_like( state.pointsToAdd ), axis = 0 )
+        state.pointsToAdd = None
     
-    sv = SphericalVoronoi( vertices )
-    hull = sv._tri
-    sv.sort_vertices_of_regions()
+    if not state.freeze:
+        state.resetStats()
+
+        def calcRejectionFor( i ):
+            diffs = vertices[i] - vertices
+            distsSquared = np.square( diffs ).sum( axis = 1 )
+            dists = np.sqrt( distsSquared )
+            directions = diffs / dists[:,np.newaxis]
+            rejections = directions / distsSquared[:,np.newaxis]
+            rejection = np.nansum( rejections, axis = 0 )
+            state.dmin = min( state.dmin, np.min( dists[dists>0] ) )
+            return rejection
+
+        translationsSquared = np.square( translations ).sum( axis = 1 )
+        translations *= np.power( np.e, -10*translationsSquared )[:,np.newaxis]
+
+        for i in range( vertices.shape[0] ):
+            translations[i] += state.repulsion * calcRejectionFor( i )
+
+        projections = np.sum( vertices * translations, axis = 1 )
+        translations -= vertices * projections[:,np.newaxis]
+        translations *= pow( np.e, -state.deccelerate )
+        state.temperature = np.square( translations ).sum()
+
+        vertices += translations
+        vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
 
     glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT )
     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA )
@@ -259,30 +305,10 @@ while state.running:
     glTranslate( 0, 0, -state.distance )
     glRotate( state.latitude, 1, 0, 0 )
     glRotate( state.longitude, 0, 1, 0 )
-
-    modelView = glGetFloatv( GL_MODELVIEW_MATRIX )
-    projection = glGetFloatv( GL_PROJECTION_MATRIX )
-    viewport = glGetIntegerv( GL_VIEWPORT )
-
-    if state.clickPos != None:
-        worldNear = gluUnProject( state.clickPos[0], state.resolution[1] - state.clickPos[1], 0 )
-        worldRear = gluUnProject( state.clickPos[0], state.resolution[1] - state.clickPos[1], 1 )
-        state.clickPos = None
-
-        p = np.array( worldNear, dtype = 'float32' )[:3]
-        d = np.array( worldRear, dtype = 'float32' )[:3] - p
-        d /= np.linalg.norm( d )
-        
-        term0 = - ( d * p ).sum()
-        term1 = 1 + np.square( term0 ) - np.square( p ).sum()
-
-        if term1 >= 0:
-            interception = p + d * ( term0 - np.sqrt( term1 ) )
-            products = ( vertices * interception ).sum( axis = 1 )
-            state.selection = products.argmax()
-            state.selection = state.selection
-        else:
-            state.selection = None
+    
+    sv = SphericalVoronoi( vertices )
+    hull = sv._tri
+    sv.sort_vertices_of_regions()
 
     factor = 1.002
     glScalef( factor, factor, factor )
@@ -295,7 +321,7 @@ while state.running:
             glColor4f( 0, 0, 1, 0.5 )
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
-            if state.selection != None:
+            if state.selection is not None:
                 glColor4f( 1, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
                 
@@ -356,6 +382,7 @@ while state.running:
     glLoadIdentity()
     gluOrtho2D( 0.0, state.resolution[0], 0.0, state.resolution[1] )
     glMatrixMode( GL_MODELVIEW )
+    glPushMatrix()
     glLoadIdentity()
     glBlendFunc( GL_SRC_ALPHA, GL_ONE )
 
@@ -375,10 +402,11 @@ while state.running:
                            "Delauney Faces: " + str( vertices.shape[0] * 2 - 4 ) + "\n" + \
                            "Repulsion: " + str( round( 1000000 * state.repulsion ) ) + "uf^-2\n"
                            "Dmin: " + str( int( 1000 * state.dmin ) ) + "mU\n" + \
-                           "Temperature: " + str( round( 1000000 * translationsSquared.sum() ) ) + "uU²/f²" )
+                           "Temperature: " + str( int( 1000000 * state.temperature ) ) + "uU²/f²" )
 
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
+    glPopMatrix()
 
     pygame.display.flip ()
