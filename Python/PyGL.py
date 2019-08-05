@@ -15,14 +15,19 @@ vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
 vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
-glClearColor( 0.0, 0.5, 0.5, 1.0 )
-
 glEnable( GL_DEPTH_TEST )
 glDepthFunc( GL_LEQUAL )
 
 glEnable( GL_BLEND )
 
-glPolygonMode( GL_FRONT,  GL_FILL )
+glEnable( GL_POLYGON_OFFSET_FILL )
+glEnable( GL_POLYGON_OFFSET_LINE )
+glPolygonOffset( 1, 1 )
+
+glEnable( GL_CULL_FACE )
+
+glEnable( GL_POINT_SMOOTH )
+glEnable( GL_LINE_SMOOTH )
 
 verticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
 glEnableClientState( GL_VERTEX_ARRAY )
@@ -47,12 +52,15 @@ lineShader = glCreateShader( GL_GEOMETRY_SHADER )
 glShaderSource( lineShader, """
 
     layout( lines ) in;
-    layout( line_strip, max_vertices = 9 ) out;
-
-    const int lines = 8;
+    layout( line_strip, max_vertices = 17 ) out;
 
     void main()
     {
+        float length = distance( inverse( gl_ModelViewProjectionMatrix ) * gl_in[0].gl_Position, 
+                                 inverse( gl_ModelViewProjectionMatrix ) * gl_in[1].gl_Position );
+
+        int lines = int( ceil( 8 * length ) );
+
         for( int i = 0; i <= lines; i++) {
             float b = 1. * i / lines;
             float a = 1. - b;
@@ -64,8 +72,10 @@ glShaderSource( lineShader, """
 
             gl_Position = gl_ModelViewProjectionMatrix * middleWorld;
             gl_FrontColor = a * gl_in[0].gl_FrontColor + b * gl_in[1].gl_FrontColor;
+                
             EmitVertex();
         }
+        
         EndPrimitive();
     }
 """ )
@@ -88,14 +98,17 @@ triShader = glCreateShader( GL_GEOMETRY_SHADER )
 glShaderSource( triShader, """
 
     layout( triangles ) in;
-    layout( triangle_strip, max_vertices = 27 ) out;
-
-    const int lines = 8;
+    layout( triangle_strip, max_vertices = 48 ) out;
 
     void main()
     {
         vec4 lastPos = gl_in[1].gl_Position;
         vec4 lastCol = gl_in[1].gl_FrontColor;
+
+        float length = distance( inverse( gl_ModelViewProjectionMatrix ) * gl_in[1].gl_Position, 
+                                 inverse( gl_ModelViewProjectionMatrix ) * gl_in[2].gl_Position );
+
+        int lines = int( ceil( 8 * length ) );
 
         for( int i = 1; i <= lines; i++) {
             gl_Position = gl_in[0].gl_Position;
@@ -158,7 +171,12 @@ class GameState:
     voronoi     = True
     borders     = True
 
+    alpha       = 1.
+    culling     = True
+    maskClear   = True
+    maskWrite   = True
     shader      = True
+    wireframe   = False
 
     freeze      = True
 
@@ -244,8 +262,20 @@ while state.running:
             state.voronoi = not state.voronoi
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'b':
             state.borders = not state.borders
+        elif e.type == pygame.KEYDOWN and e.dict['key'] == 97: # 'a'
+            state.alpha -= 0.1 * pow( 10, mod ) * pow( -1, mod2 )
+            state.alpha = max( 0, min( 1, state.alpha ) )
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'c':
+            state.culling = not state.culling
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'm':
+            state.maskWrite = not state.maskWrite
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'M':
+            state.maskClear = not state.maskClear
+            state.maskWrite = state.maskClear
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 's':
             state.shader = not state.shader
+        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'w':
+            state.wireframe = not state.wireframe
         elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'f':
             state.freeze = not state.freeze
         elif e.type == pygame.KEYDOWN and e.dict['key'] == 32: # ' '
@@ -296,9 +326,34 @@ while state.running:
 
         vertices += translations
         vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+    
+    sv = SphericalVoronoi( vertices )
 
-    glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT )
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA )
+    sv.sort_vertices_of_regions()
+    for region in sv.regions:
+        a = sv.vertices[region[0]]
+        b = sv.vertices[region[1]]
+        c = sv.vertices[region[2]]
+        if np.sum( np.cross( b - a, c - b ) * b ) < 0:
+            region.reverse()
+
+    verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
+
+    hull = sv._tri
+    
+    regions = np.array( [np.array(region).astype( 'uint32' ) for region in sv.regions] ) + vertices.shape[0]
+    selectedRegion = regions[state.selection] if state.selection is not None else None
+
+    def face( i, region ): return np.concatenate( ( [i] if state.shader else [], region, [region[0]] ) )
+    faces = np.array( [ face( i, region ) for ( i, region ) in zip( it.count(), regions ) ] )
+    selectedFace = faces[ state.selection ] if state.selection is not None else None
+
+    glClearColor( 0.2, 0.4, 0.4, 1.0 )
+    glClear( GL_COLOR_BUFFER_BIT )
+
+    if state.maskClear:
+        glDepthMask( GL_TRUE )
+        glClear( GL_DEPTH_BUFFER_BIT )
 
     glLoadIdentity()
     gluPerspective( 45, state.resolution[0] / state.resolution[1], 0.1, 50.0 )
@@ -306,76 +361,87 @@ while state.running:
     glRotate( state.latitude, 1, 0, 0 )
     glRotate( state.longitude, 0, 1, 0 )
     
-    sv = SphericalVoronoi( vertices )
-    hull = sv._tri
-    sv.sort_vertices_of_regions()
+    if state.culling:
+        glEnable( GL_CULL_FACE )
+    else:
+        glDisable( GL_CULL_FACE )
 
-    factor = 1.002
-    glScalef( factor, factor, factor )
-
-    verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
-    
-    if state.points:
-        with verticesBO:
-            glPointSize( 5 )
-            glColor4f( 0, 0, 1, 0.5 )
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
-            if state.selection is not None:
-                glColor4f( 1, 0, 0, 1 )
-                glDrawArrays( GL_POINTS, state.selection, 1 )
-                
-    glUseProgram( shaderProgramLines if state.shader else 0 )
-
-    if state.delauney:
-        with verticesBO:
-            glColor4f( 0, 0, 1, 0.2 )
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            for simplex in hull.simplices:
-                glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
-    
-    regions = [np.array(region) + vertices.shape[0] for region in sv.regions]
-    selectedRegion = regions[ state.selection ] if state.selection is not None else None
-    
-    if state.borders:
-        with verticesBO:
-            glColor4f( 0, 0, 0, 0.2 )
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            for region in regions:
-                glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
-                
-    if selectedRegion is not None:
-        with verticesBO:
-            glColor4f( 1, 0, 0, 1 )
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            glDrawElements( GL_LINE_LOOP, len( selectedRegion ), GL_UNSIGNED_INT, selectedRegion )
-    
-    factor = 1 / factor
-    glScalef( factor, factor, factor )
-
-    faces = [ np.concatenate( ( [index], region, [region[0]] ) ).astype( 'uint32' ) for ( index, region ) in zip( it.count(), regions )]
-    selectedFace = faces[ state.selection ] if state.selection is not None else None
-    
+    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA )
+    glDepthMask( state.maskWrite )
+    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE if state.wireframe else GL_FILL )
+       
     glUseProgram( shaderProgramTris if state.shader else 0 )
-                
+
     if state.voronoi:
+        invModelView = np.linalg.inv( glGetFloatv( GL_MODELVIEW_MATRIX ) )
+        zOrder = np.argsort( np.dot( vertices, -invModelView[2,:3] ) )
         with verticesBO:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            for face in faces:
-                brightness = 1 - 0.1 * ( face.shape[0] - 5 )
-                glColor4f( brightness, brightness, brightness, 1 )
-                if not state.shader:
-                    face = face[1:]
+            glLineWidth( 1 )
+            brightnessTop = 1.5 if state.shader else 1.4
+            for face in faces[zOrder]:
+                brightness = brightnessTop - 0.1 * face.shape[0]
+                glColor4f( brightness, brightness, brightness, state.alpha )
                 glDrawElements( GL_TRIANGLE_FAN, face.shape[0], GL_UNSIGNED_INT, face )
+
+    glDisable( GL_DEPTH_TEST )
+    glPolygonMode( GL_FRONT_AND_BACK, GL_FILL )
                 
     if selectedFace is not None:
         with verticesBO:
             glColor4f( 1, 0, 0, 0.2 )
-            if not state.shader:
-                selectedFace = selectedFace[1:]
             glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
+    
+    glEnable( GL_DEPTH_TEST )
+    
+    glUseProgram( shaderProgramLines if state.shader else 0 )
 
+    if selectedRegion is not None:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glLineWidth( 2 )
+            glColor4f( 1, 0, 0, 0.5 )
+            glDrawElements( GL_LINE_LOOP, len( selectedRegion ), GL_UNSIGNED_INT, selectedRegion )
+
+    if state.borders:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glLineWidth( 1 )
+            glColor4f( 0, 0, 0, 0.2 if not state.wireframe or not state.voronoi else 1 )
+            for region in regions:
+                glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
+
+    glDepthMask( GL_FALSE )
+    glPushMatrix()
+    glScale( 1.002, 1.002, 1.002 )
+
+    if state.delauney:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glLineWidth( 1 )
+            glColor4f( 0, 0, 1, 0.2 )
+            for simplex in hull.simplices:
+                glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
+
+    glDepthMask( state.maskWrite )
+    
     glUseProgram( 0 )
+                
+    if state.points:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glPointSize( 5 )
+            glColor4f( 0, 0, 1, 0.5 )
+            glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
+                
+    if state.selection is not None:
+        with verticesBO:
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glPointSize( 6 )
+            glColor4f( 0.9, 0, 0, 1 )
+            glDrawArrays( GL_POINTS, state.selection, 1 )
+                
+    glPopMatrix()
 
     glMatrixMode( GL_PROJECTION )
     glPushMatrix()
