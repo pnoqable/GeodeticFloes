@@ -5,6 +5,7 @@ import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.arrays import vbo
+import glm
 import itertools as it
 
 pygame.init()
@@ -186,16 +187,41 @@ class GameState:
     dmin        = 2.
     temperature = 0.
 
-    def resetStats(self):
+    def resetStats( self ):
         self.dmin = 2.
+
+    def mvp( self ):
+        mvp = glm.perspective( np.pi/4, state.resolution[0] / state.resolution[1], 0.1, 50.0 )
+        mvp = glm.translate( mvp, ( 0, 0, -state.distance ) )
+        mvp = glm.rotate( mvp, state.latitude, ( 1, 0, 0 ) )
+        mvp = glm.rotate( mvp, state.longitude, ( 0, 1, 0 ) )
+        return np.array( mvp, dtype = float )
+
+    def camera( self ):
+        invMvp = np.linalg.inv( self.mvp() )
+        return invMvp[2,:3] / invMvp[2,3]
+
+    def ortho( self ):
+        ortho = glm.ortho( 0.0, self.resolution[0], 0.0, self.resolution[1], 0, 1 )
+        return np.array( ortho, dtype = float )
 
 state = GameState()
 
 while state.running:
 
+    def unproject( screenPos ):
+        screenPos = np.append( screenPos, [1] ).astype( float )
+        screenPos[:2] /= state.resolution
+        screenPos[:3] = 2 * screenPos[:3] - 1
+        invMvp = np.linalg.inv( state.mvp() )
+        worldPos = invMvp.T.dot( screenPos )
+        return worldPos[:3] / worldPos[3]
+
     def unprojectToSphereNear( screenPos ):
-        worldNear = gluUnProject( screenPos[0], state.resolution[1] - screenPos[1], 0 )
-        worldRear = gluUnProject( screenPos[0], state.resolution[1] - screenPos[1], 1 )
+        screenPos = np.array( screenPos )
+        screenPos[1] = state.resolution[1] - screenPos[1]
+        worldNear = unproject( np.append( screenPos, [0] ) )
+        worldRear = unproject( np.append( screenPos, [1] ) )
 
         p = np.array( worldNear, dtype = 'float32' )[:3]
         d = np.array( worldRear, dtype = 'float32' )[:3] - p
@@ -239,8 +265,8 @@ while state.running:
                 vertices[state.selection] = interception / np.linalg.norm( interception )
                 translations[state.selection] = 0
         elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][1]:
-            state.longitude += np.pi / 12 * e.dict['rel'][0]
-            state.latitude  += np.pi / 12 * e.dict['rel'][1]
+            state.longitude += np.pi * e.dict['rel'][0] / state.resolution[1]
+            state.latitude  += np.pi * e.dict['rel'][1] / state.resolution[1]
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 4:
             state.distance *= 1.1
         elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 5:
@@ -355,11 +381,7 @@ while state.running:
         glDepthMask( GL_TRUE )
         glClear( GL_DEPTH_BUFFER_BIT )
 
-    glLoadIdentity()
-    gluPerspective( 45, state.resolution[0] / state.resolution[1], 0.1, 50.0 )
-    glTranslate( 0, 0, -state.distance )
-    glRotate( state.latitude, 1, 0, 0 )
-    glRotate( state.longitude, 0, 1, 0 )
+    glLoadMatrixf( state.mvp() )
     
     if state.culling:
         glEnable( GL_CULL_FACE )
@@ -373,8 +395,7 @@ while state.running:
     glUseProgram( shaderProgramTris if state.shader else 0 )
 
     if state.voronoi:
-        invModelView = np.linalg.inv( glGetFloatv( GL_MODELVIEW_MATRIX ) )
-        zOrder = np.argsort( np.dot( vertices, -invModelView[2,:3] ) )
+        zOrder = np.argsort( np.dot( vertices, state.camera() ) )
         with verticesBO:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 1 )
@@ -410,8 +431,10 @@ while state.running:
                 glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
 
     glDepthMask( GL_FALSE )
-    glPushMatrix()
-    glScale( 1.002, 1.002, 1.002 )
+
+    scale = np.identity( 4 )
+    scale[:3] *= 1.002
+    glLoadMatrixf( scale.dot( state.mvp() ) )
 
     if state.delauney:
         with verticesBO:
@@ -436,16 +459,8 @@ while state.running:
                 glPointSize( 6 )
                 glColor4f( 0.9, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
-                
-    glPopMatrix()
 
-    glMatrixMode( GL_PROJECTION )
-    glPushMatrix()
-    glLoadIdentity()
-    gluOrtho2D( 0.0, state.resolution[0], 0.0, state.resolution[1] )
-    glMatrixMode( GL_MODELVIEW )
-    glPushMatrix()
-    glLoadIdentity()
+    glLoadMatrixf( state.ortho() )
     glBlendFunc( GL_SRC_ALPHA, GL_ONE )
 
     def drawText( pos, size, text ):
@@ -465,10 +480,5 @@ while state.running:
                            "Repulsion: " + str( round( 1000000 * state.repulsion ) ) + "uf^-2\n"
                            "Dmin: " + str( int( 1000 * state.dmin ) ) + "mU\n" + \
                            "Temperature: " + str( int( 1000000 * state.temperature ) ) + "uU²/f²" )
-
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-    glPopMatrix()
 
     pygame.display.flip ()
