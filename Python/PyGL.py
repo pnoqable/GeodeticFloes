@@ -166,16 +166,16 @@ class GameState:
     latitude    = 0.
 
     running     = True
-    points      = True
+    points      = False
     delauney    = False
     voronoi     = True
     borders     = True
 
-    alpha       = 1.
-    culling     = True
+    alpha       = 0.
+    culling     = False
     maskClear   = True
     maskWrite   = True
-    shader      = True
+    shader      = False
     wireframe   = False
 
     freeze      = True
@@ -381,18 +381,16 @@ while state.running:
             brightnessTop = 1.5 if state.shader else 1.4
             for face in faces[zOrder]:
                 brightness = brightnessTop - 0.1 * face.shape[0]
-                glColor4f( brightness, brightness, brightness, state.alpha )
+                alpha = state.alpha - brightness * state.alpha + brightness
+                glColor4f( brightness, brightness, brightness, alpha )
                 glDrawElements( GL_TRIANGLE_FAN, face.shape[0], GL_UNSIGNED_INT, face )
 
-    glDisable( GL_DEPTH_TEST )
     glPolygonMode( GL_FRONT_AND_BACK, GL_FILL )
                 
     if selectedFace is not None:
         with verticesBO:
             glColor4f( 1, 0, 0, 0.2 )
             glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
-    
-    glEnable( GL_DEPTH_TEST )
     
     glUseProgram( shaderProgramLines if state.shader else 0 )
 
@@ -433,13 +431,11 @@ while state.running:
             glPointSize( 5 )
             glColor4f( 0, 0, 1, 0.5 )
             glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
-                
-    if state.selection is not None:
-        with verticesBO:
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-            glPointSize( 6 )
-            glColor4f( 0.9, 0, 0, 1 )
-            glDrawArrays( GL_POINTS, state.selection, 1 )
+
+            if state.selection is not None:
+                glPointSize( 6 )
+                glColor4f( 0.9, 0, 0, 1 )
+                glDrawArrays( GL_POINTS, state.selection, 1 )
                 
     glPopMatrix()
 
