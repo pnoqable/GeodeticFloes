@@ -63,16 +63,15 @@ glShaderSource( lineShader, """
         int lines = int( ceil( 8 * length ) );
 
         for( int i = 0; i <= lines; i++) {
-            float b = 1. * i / lines;
-            float a = 1. - b;
+            float a = float( i ) / float( lines );
 
-            vec4 middle = a * gl_in[0].gl_Position + b * gl_in[1].gl_Position;
+            vec4 middle = mix( gl_in[0].gl_Position, gl_in[1].gl_Position, a );
             vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
             gl_Position = gl_ModelViewProjectionMatrix * middleWorld;
-            gl_FrontColor = a * gl_in[0].gl_FrontColor + b * gl_in[1].gl_FrontColor;
+            gl_FrontColor = mix( gl_in[0].gl_FrontColor, gl_in[1].gl_FrontColor, a );
                 
             EmitVertex();
         }
@@ -120,16 +119,15 @@ glShaderSource( triShader, """
             gl_FrontColor = lastCol;
             EmitVertex();
 
-            float b = 1. * i / lines;
-            float a = 1. - b;
+            float a = float( i ) / float( lines );
 
-            vec4 middle = a * gl_in[1].gl_Position + b * gl_in[2].gl_Position;
+            vec4 middle = mix( gl_in[1].gl_Position, gl_in[2].gl_Position, a );
             vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
             lastPos = gl_ModelViewProjectionMatrix * middleWorld;  // middle;
-            lastCol = a * gl_in[1].gl_FrontColor + b * gl_in[2].gl_FrontColor;
+            lastCol = mix( gl_in[1].gl_FrontColor, gl_in[2].gl_FrontColor, a );
 
             gl_Position = lastPos;
             gl_FrontColor = lastCol;
