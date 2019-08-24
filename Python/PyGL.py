@@ -243,71 +243,71 @@ while state.running:
 
     for e in pygame.event.get():
         # print( e.type, e.dict )
-        mod = 1 if 'mod' in e.dict and int( e.dict['mod'] ) & ( 64 + 128 ) else 0 # left or right CTRL
-        mod2 = 1 if 'mod' in e.dict and int( e.dict['mod'] ) & ( 1 + 2 ) else 0 # left or right SHIFT
+        mod = 1 if 'mod' in e.dict and int( e.mod ) & ( 64 + 128 ) else 0 # left or right CTRL
+        mod2 = 1 if 'mod' in e.dict and int( e.mod ) & ( 1 + 2 ) else 0 # left or right SHIFT
         if e.type == pygame.QUIT or \
-           e.type == pygame.KEYDOWN and e.dict['key'] == 27: # ESC
+           e.type == pygame.KEYDOWN and e.key == 27: # ESC
             state.running = False
         elif e.type == pygame.VIDEORESIZE:
             state.resolution = ( e.w, e.h )
             glViewport( 0, 0, e.w, e.h )
-        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 1:
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             interception = unprojectToSphereNear( e.pos )
             if interception is not None:
                 state.selection = np.dot( vertices, interception ).argmax()
             else:
                 state.selection = None
-        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][0]:
+        elif e.type == pygame.MOUSEMOTION and e.buttons == ( 1, 0, 0 ):
             interception = unprojectToSphereNear( e.pos )
             if interception is not None and state.selection is not None:
                 vertices[state.selection] = interception / np.linalg.norm( interception )
                 translations[state.selection] = 0
-        elif e.type == pygame.MOUSEMOTION and e.dict['buttons'][1]:
-            state.longitude += np.pi * e.dict['rel'][0] / state.resolution[1]
-            state.latitude  += np.pi * e.dict['rel'][1] / state.resolution[1]
-        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 4:
+        elif e.type == pygame.MOUSEMOTION and e.buttons == ( 0, 1, 0 ):
+            state.longitude += np.pi * e.rel[0] / state.resolution[1]
+            state.latitude  += np.pi * e.rel[1] / state.resolution[1]
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 4:
             state.distance *= 1.1
-        elif e.type == pygame.MOUSEBUTTONDOWN and e.dict['button'] == 5:
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 5:
             state.distance /= 1.1
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 93: # '+'
+        elif e.type == pygame.KEYDOWN and e.key == 93: # '+'
             count = pow( 10, mod ) * pow( 100, mod2 )
             state.pointsToAdd = np.random.sample( ( count, 3 ) ).astype( 'float32' ) - 0.5
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 47: # '-'
+        elif e.type == pygame.KEYDOWN and e.key == 47: # '-'
             count = min( pow( 10, mod ) * pow( 100, mod2 ), vertices.shape[0] - 4 )
             state.idsToRemove = vertices.shape[0] - count + np.arange( count )
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 127: # DEL
+        elif e.type == pygame.KEYDOWN and e.key == 127: # DEL
             if state.selection is not None and vertices.shape[0] > 4:
                 state.idsToRemove = [state.selection]
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'p':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'p':
             state.points = not state.points
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'd':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'd':
             state.delauney = not state.delauney
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'v':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'v':
             state.voronoi = not state.voronoi
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'b':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'b':
             state.borders = not state.borders
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 97: # 'a'
+        elif e.type == pygame.KEYDOWN and e.key == 97: # 'a'
             state.alpha -= 0.1 * pow( 10, mod ) * pow( -1, mod2 )
             state.alpha = max( 0, min( 1, state.alpha ) )
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'c':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'c':
             state.culling = not state.culling
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'm':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'm':
             state.maskWrite = not state.maskWrite
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'M':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'M':
             state.maskClear = not state.maskClear
             state.maskWrite = state.maskClear
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 's':
+        elif e.type == pygame.KEYDOWN and e.unicode == 's':
             state.shader = not state.shader
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'w':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'w':
             state.wireframe = not state.wireframe
-        elif e.type == pygame.KEYDOWN and e.dict['unicode'] == 'f':
+        elif e.type == pygame.KEYDOWN and e.unicode == 'f':
             state.freeze = not state.freeze
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 32: # ' '
+        elif e.type == pygame.KEYDOWN and e.key == 32: # ' '
             state.deccelerate = 0.2 * pow( 10, mod ) * pow( -1, mod2 )
             state.freeze = False
-        elif e.type == pygame.KEYUP and e.dict['key'] == 32: # ' '
+        elif e.type == pygame.KEYUP and e.key == 32: # ' '
             state.deccelerate = 0
-        elif e.type == pygame.KEYDOWN and e.dict['key'] == 114: # 'r'
+        elif e.type == pygame.KEYDOWN and e.key == 114: # 'r'
             state.repulsion -= 0.000001 * pow( 10, mod ) * pow( -1, mod2 )
             state.repulsion = max( 0, round( state.repulsion, 6 ) )
 
