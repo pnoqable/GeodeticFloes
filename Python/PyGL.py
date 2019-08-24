@@ -153,16 +153,20 @@ if glGetProgramiv( shaderProgramTris, GL_LINK_STATUS ) != GL_TRUE:
     raise RuntimeError( message )
 
 class GameState:
-    resolution  = None
-
     selection   = None
-
     idsToRemove = None
     pointsToAdd = None
 
-    distance    = 3.
-    longitude   = 0.
-    latitude    = 0.
+    freeze      = True
+    repulsion   = 0.00005
+    deccelerate = 0
+    
+    dmin        = 2
+    temperature = 0
+
+    resolution  = None
+    perspective = None
+    view        = None
 
     running     = True
     points      = False
@@ -170,38 +174,47 @@ class GameState:
     voronoi     = True
     borders     = True
 
-    alpha       = 0.
+    alpha       = 0
     culling     = False
     maskClear   = True
     maskWrite   = True
     shader      = False
     wireframe   = False
 
-    freeze      = True
+    def __init__( self ):
+        self.view = glm.translate( glm.mat4(), ( 0, 0, -3 ) )
 
-    repulsion   = 0.00005
-    deccelerate = 0.
-    
-    dmin        = 2.
-    temperature = 0.
-
-    def resetStats( self ):
-        self.dmin = 2.
+    def setResolution( self, res ):
+        self.resolution = res
+        self.perspective = glm.perspective( np.pi/4, res[0] / res[1], 0.1, 10 )
 
     def mvp( self ):
-        mvp = glm.perspective( np.pi/4, state.resolution[0] / state.resolution[1], 0.1, 50.0 )
-        mvp = glm.translate( mvp, ( 0, 0, -state.distance ) )
-        mvp = glm.rotate( mvp, state.latitude, ( 1, 0, 0 ) )
-        mvp = glm.rotate( mvp, state.longitude, ( 0, 1, 0 ) )
-        return np.array( mvp, dtype = float )
+        return np.array( self.perspective * self.view, dtype = float )
 
     def camera( self ):
         invMvp = np.linalg.inv( self.mvp() )
         return invMvp[2,:3] / invMvp[2,3]
 
+    def rotate( self, a, b ):
+        a = glm.normalize( a )
+        b = glm.normalize( b )
+        cosArc = glm.dot( a, b )
+        if cosArc <= -1:
+            self.view = glm.scale( self.view, ( -1, -1, -1 ) )
+        elif cosArc < 1:
+            angle = glm.acos( cosArc )
+            axis = glm.cross( a, b ) 
+            self.view = glm.rotate( self.view, angle, axis )
+
+    def zoom( self, exp ):
+        self.view[3,2] *= glm.pow( 1.1, exp )
+
     def ortho( self ):
-        ortho = glm.ortho( 0.0, self.resolution[0], 0.0, self.resolution[1], 0, 1 )
+        ortho = glm.ortho( 0, self.resolution[0], 0, self.resolution[1], 0, 1 )
         return np.array( ortho, dtype = float )
+
+    def resetStats( self ):
+        self.dmin = 2
 
 state = GameState()
 
@@ -249,7 +262,7 @@ while state.running:
            e.type == pygame.KEYDOWN and e.key == 27: # ESC
             state.running = False
         elif e.type == pygame.VIDEORESIZE:
-            state.resolution = ( e.w, e.h )
+            state.setResolution( ( e.w, e.h ) )
             glViewport( 0, 0, e.w, e.h )
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             interception = unprojectToSphereNear( e.pos )
@@ -263,12 +276,14 @@ while state.running:
                 vertices[state.selection] = interception / np.linalg.norm( interception )
                 translations[state.selection] = 0
         elif e.type == pygame.MOUSEMOTION and e.buttons == ( 0, 1, 0 ):
-            state.longitude += np.pi * e.rel[0] / state.resolution[1]
-            state.latitude  += np.pi * e.rel[1] / state.resolution[1]
+            lastPos = unprojectToSphereNear( np.array( e.pos ) - e.rel )
+            currPos = unprojectToSphereNear( np.array( e.pos ) )
+            if lastPos is not None and currPos is not None:
+                state.rotate( lastPos, currPos )
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 4:
-            state.distance *= 1.1
+            state.zoom( 1 )
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 5:
-            state.distance /= 1.1
+            state.zoom( -1 )
         elif e.type == pygame.KEYDOWN and e.key == 93: # '+'
             count = pow( 10, mod ) * pow( 100, mod2 )
             state.pointsToAdd = np.random.sample( ( count, 3 ) ).astype( 'float32' ) - 0.5
