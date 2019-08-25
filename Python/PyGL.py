@@ -228,7 +228,7 @@ while state.running:
         worldPos = invMvp.T.dot( screenPos )
         return worldPos[:3] / worldPos[3]
 
-    def unprojectToSphereNear( screenPos ):
+    def unprojectToSphereNear( screenPos, snapToSphere = False ):
         screenPos = np.array( screenPos )
         screenPos[1] = state.resolution[1] - screenPos[1]
         worldNear = unproject( np.append( screenPos, [0] ) )
@@ -252,6 +252,14 @@ while state.running:
             if 0 > projection1:
                 return p - d * projection1
         
+        elif snapToSphere:
+            res = p - d * ( term0 + 2 * term1 )
+            eye = -state.camera()
+            if np.dot( res, eye ) > 0:
+                res = np.cross( eye, d )
+                res = np.cross( res, eye )
+            return res / np.linalg.norm( res )
+        
         return None
 
     for e in pygame.event.get():
@@ -271,13 +279,13 @@ while state.running:
             else:
                 state.selection = None
         elif e.type == pygame.MOUSEMOTION and e.buttons == ( 1, 0, 0 ):
-            interception = unprojectToSphereNear( e.pos )
+            interception = unprojectToSphereNear( e.pos, True )
             if interception is not None and state.selection is not None:
                 vertices[state.selection] = interception / np.linalg.norm( interception )
                 translations[state.selection] = 0
-        elif e.type == pygame.MOUSEMOTION and e.buttons == ( 0, 1, 0 ):
-            lastPos = unprojectToSphereNear( np.array( e.pos ) - e.rel )
-            currPos = unprojectToSphereNear( np.array( e.pos ) )
+        elif e.type == pygame.MOUSEMOTION and e.buttons in [ ( 0, 0, 1 ), ( 0, 1, 0 ) ]:
+            lastPos = unprojectToSphereNear( np.array( e.pos ) - e.rel, True )
+            currPos = unprojectToSphereNear( np.array( e.pos ), True )
             if lastPos is not None and currPos is not None:
                 state.rotate( lastPos, currPos )
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 4:
