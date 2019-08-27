@@ -9,7 +9,8 @@ import glm
 import itertools as it
 
 pygame.init()
-screen = pygame.display.set_mode( ( 800, 600 ), pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF, 24 )
+pygameFlags = pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF
+screen = pygame.display.set_mode( ( 800, 600 ), pygameFlags, 24 )
 
 np.random.seed()
 vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
@@ -57,8 +58,9 @@ glShaderSource( lineShader, """
 
     void main()
     {
-        float length = distance( inverse( gl_ModelViewProjectionMatrix ) * gl_in[0].gl_Position, 
-                                 inverse( gl_ModelViewProjectionMatrix ) * gl_in[1].gl_Position );
+        mat4 invMvp = inverse( gl_ModelViewProjectionMatrix );
+        float length = distance( invMvp * gl_in[0].gl_Position, 
+                                 invMvp * gl_in[1].gl_Position );
 
         int lines = int( ceil( 8 * length ) );
 
@@ -66,7 +68,7 @@ glShaderSource( lineShader, """
             float a = float( i ) / float( lines );
 
             vec4 middle = mix( gl_in[0].gl_Position, gl_in[1].gl_Position, a );
-            vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
+            vec4 middleWorld = invMvp * middle;
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
@@ -105,8 +107,9 @@ glShaderSource( triShader, """
         vec4 lastPos = gl_in[1].gl_Position;
         vec4 lastCol = gl_in[1].gl_FrontColor;
 
-        float length = distance( inverse( gl_ModelViewProjectionMatrix ) * gl_in[1].gl_Position, 
-                                 inverse( gl_ModelViewProjectionMatrix ) * gl_in[2].gl_Position );
+        mat4 invMvp = inverse( gl_ModelViewProjectionMatrix );
+        float length = distance( invMvp * gl_in[1].gl_Position, 
+                                 invMvp * gl_in[2].gl_Position );
 
         int lines = int( ceil( 8 * length ) );
 
@@ -122,7 +125,7 @@ glShaderSource( triShader, """
             float a = float( i ) / float( lines );
 
             vec4 middle = mix( gl_in[1].gl_Position, gl_in[2].gl_Position, a );
-            vec4 middleWorld = inverse( gl_ModelViewProjectionMatrix ) * middle;
+            vec4 middleWorld = invMvp * middle;
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
