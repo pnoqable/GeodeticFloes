@@ -36,12 +36,17 @@ glEnableClientState( GL_VERTEX_ARRAY )
 
 vtxShader = glCreateShader( GL_VERTEX_SHADER )
 glShaderSource( vtxShader, """
+
+    #version 140
+
+    uniform mat4 view;
+    uniform mat4 proj;
+
+    mat4 mvp = proj * view;
+    
     void main() {
-        gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-        gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;
-        
-        vec4 color = gl_Color;
-        gl_FrontColor = color;
+        gl_Position = mvp * gl_Vertex;
+        gl_FrontColor = gl_Color;
     }
 """)
 glCompileShader( vtxShader )
@@ -50,21 +55,42 @@ if glGetShaderiv( vtxShader, GL_COMPILE_STATUS ) != GL_TRUE:
     message = glGetShaderInfoLog( vtxShader )
     raise RuntimeError( message )
 
+shaderProgramPoints = glCreateProgram()
+glAttachShader( shaderProgramPoints, vtxShader )
+glLinkProgram( shaderProgramPoints )
+
+if glGetProgramiv( shaderProgramPoints, GL_LINK_STATUS ) != GL_TRUE:
+    message = glGetProgramInfoLog( shaderProgramPoints )
+    raise RuntimeError( message )
+
+shaderView = glGetUniformLocation( shaderProgramPoints, "view" )
+shaderProj = glGetUniformLocation( shaderProgramPoints, "proj" )
+
 lineShader = glCreateShader( GL_GEOMETRY_SHADER )
 glShaderSource( lineShader, """
+
+    #version 150
+
+    uniform mat4 view;
+    uniform mat4 proj;
+
+    uniform float sides;
+    uniform int minLines;
+
+    mat4 mvp = proj * view;
+    mat4 invMvp = inverse( mvp );
 
     layout( lines ) in;
     layout( line_strip, max_vertices = 17 ) out;
 
     void main()
     {
-        mat4 invMvp = inverse( gl_ModelViewProjectionMatrix );
         float length = distance( invMvp * gl_in[0].gl_Position, 
                                  invMvp * gl_in[1].gl_Position );
 
-        int lines = int( ceil( 8 * length ) );
+        int lines = max( minLines, int( ceil( sides * length ) ) );
 
-        for( int i = 0; i <= lines; i++) {
+        for( int i = 0; i <= lines; i++ ) {
             float a = float( i ) / float( lines );
 
             vec4 middle = mix( gl_in[0].gl_Position, gl_in[1].gl_Position, a );
@@ -72,7 +98,7 @@ glShaderSource( lineShader, """
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
-            gl_Position = gl_ModelViewProjectionMatrix * middleWorld;
+            gl_Position = mvp * middleWorld;
             gl_FrontColor = mix( gl_in[0].gl_FrontColor, gl_in[1].gl_FrontColor, a );
                 
             EmitVertex();
@@ -96,8 +122,24 @@ if glGetProgramiv( shaderProgramLines, GL_LINK_STATUS ) != GL_TRUE:
     message = glGetProgramInfoLog( shaderProgramLines )
     raise RuntimeError( message )
 
+assert shaderView == glGetUniformLocation( shaderProgramLines, "view" )
+assert shaderProj == glGetUniformLocation( shaderProgramLines, "proj" )
+shaderSides = glGetUniformLocation( shaderProgramLines, "sides" )
+shaderMinLines = glGetUniformLocation( shaderProgramLines, "minLines" )
+
 triShader = glCreateShader( GL_GEOMETRY_SHADER )
 glShaderSource( triShader, """
+
+    #version 150
+
+    uniform mat4 view;
+    uniform mat4 proj;
+
+    uniform float sides;
+    uniform int minLines;
+    
+    mat4 mvp = proj * view;
+    mat4 invMvp = inverse( mvp );
 
     layout( triangles ) in;
     layout( triangle_strip, max_vertices = 48 ) out;
@@ -107,13 +149,12 @@ glShaderSource( triShader, """
         vec4 lastPos = gl_in[1].gl_Position;
         vec4 lastCol = gl_in[1].gl_FrontColor;
 
-        mat4 invMvp = inverse( gl_ModelViewProjectionMatrix );
         float length = distance( invMvp * gl_in[1].gl_Position, 
                                  invMvp * gl_in[2].gl_Position );
 
-        int lines = int( ceil( 8 * length ) );
+        int lines = max( minLines, int( ceil( sides * length ) ) );
 
-        for( int i = 1; i <= lines; i++) {
+        for( int i = 1; i <= lines; i++ ) {
             gl_Position = gl_in[0].gl_Position;
             gl_FrontColor = gl_in[0].gl_FrontColor;
             EmitVertex();
@@ -129,7 +170,7 @@ glShaderSource( triShader, """
 
             middleWorld.xyz = normalize( middleWorld.xyz );
 
-            lastPos = gl_ModelViewProjectionMatrix * middleWorld;  // middle;
+            lastPos = mvp * middleWorld;  // middle;
             lastCol = mix( gl_in[1].gl_FrontColor, gl_in[2].gl_FrontColor, a );
 
             gl_Position = lastPos;
@@ -155,6 +196,11 @@ if glGetProgramiv( shaderProgramTris, GL_LINK_STATUS ) != GL_TRUE:
     message = glGetProgramInfoLog( shaderProgramTris )
     raise RuntimeError( message )
 
+assert shaderView == glGetUniformLocation( shaderProgramTris, "view" )
+assert shaderProj == glGetUniformLocation( shaderProgramTris, "proj" )
+shaderSidesTri = glGetUniformLocation( shaderProgramTris, "sides" )
+assert shaderSides == shaderSidesTri
+
 class GameState:
     selection   = None
     idsToRemove = None
@@ -168,7 +214,7 @@ class GameState:
     temperature = 0
 
     resolution  = None
-    perspective = None
+    proj        = None
     view        = None
 
     running     = True
@@ -181,7 +227,7 @@ class GameState:
     culling     = False
     maskClear   = True
     maskWrite   = True
-    shader      = False
+    shader      = 1
     wireframe   = False
 
     def __init__( self ):
@@ -189,10 +235,10 @@ class GameState:
 
     def setResolution( self, res ):
         self.resolution = res
-        self.perspective = glm.perspective( np.pi/4, res[0] / res[1], 0.1, 10 )
+        self.proj = glm.perspective( np.pi/4, res[0] / res[1], 0.1, 10 )
 
     def mvp( self ):
-        return np.array( self.perspective * self.view, dtype = float )
+        return np.array( self.proj * self.view, dtype = float )
 
     def camera( self ):
         invMvp = np.linalg.inv( self.mvp() )
@@ -266,7 +312,6 @@ while state.running:
         return None
 
     for e in pygame.event.get():
-        # print( e.type, e.dict )
         mod = 1 if 'mod' in e.dict and int( e.mod ) & ( 64 + 128 ) else 0 # left or right CTRL
         mod2 = 1 if 'mod' in e.dict and int( e.mod ) & ( 1 + 2 ) else 0 # left or right SHIFT
         if e.type == pygame.QUIT or \
@@ -322,8 +367,9 @@ while state.running:
         elif e.type == pygame.KEYDOWN and e.unicode == 'M':
             state.maskClear = not state.maskClear
             state.maskWrite = state.maskClear
-        elif e.type == pygame.KEYDOWN and e.unicode == 's':
-            state.shader = not state.shader
+        elif e.type == pygame.KEYDOWN and e.key == 115:
+            state.shader -= pow( 8, mod ) * pow( -1, mod2 )
+            state.shader = max( 1, min( 8, state.shader ) )
         elif e.type == pygame.KEYDOWN and e.unicode == 'w':
             state.wireframe = not state.wireframe
         elif e.type == pygame.KEYDOWN and e.unicode == 'f':
@@ -394,7 +440,7 @@ while state.running:
     regions = np.array( [np.array(region).astype( 'uint32' ) for region in sv.regions] ) + vertices.shape[0]
     selectedRegion = regions[state.selection] if state.selection is not None else None
 
-    def face( i, region ): return np.concatenate( ( [i] if state.shader else [], region, [region[0]] ) )
+    def face( i, region ): return np.concatenate( ( [i], region, [region[0]] ) )
     faces = np.array( [ face( i, region ) for ( i, region ) in zip( it.count(), regions ) ] )
     selectedFace = faces[ state.selection ] if state.selection is not None else None
 
@@ -404,8 +450,6 @@ while state.running:
     if state.maskClear:
         glDepthMask( GL_TRUE )
         glClear( GL_DEPTH_BUFFER_BIT )
-
-    glLoadMatrixf( state.mvp() )
     
     if state.culling:
         glEnable( GL_CULL_FACE )
@@ -416,16 +460,19 @@ while state.running:
     glDepthMask( state.maskWrite )
     glPolygonMode( GL_FRONT_AND_BACK, GL_LINE if state.wireframe else GL_FILL )
        
-    glUseProgram( shaderProgramTris if state.shader else 0 )
+    glUseProgram( shaderProgramTris )
+    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( state.view ) )
+    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
+    glUniform1f( shaderSides, state.shader )
+    glUniform1i( shaderMinLines, 1 )
 
     if state.voronoi:
         zOrder = np.argsort( np.dot( vertices, state.camera() ) )
         with verticesBO:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 1 )
-            brightnessTop = 1.5 if state.shader else 1.4
             for face in faces[zOrder]:
-                brightness = brightnessTop - 0.1 * face.shape[0]
+                brightness = 1.5 - 0.1 * face.shape[0]
                 alpha = state.alpha - brightness * state.alpha + brightness
                 glColor4f( brightness, brightness, brightness, alpha )
                 glDrawElements( GL_TRIANGLE_FAN, face.shape[0], GL_UNSIGNED_INT, face )
@@ -437,7 +484,11 @@ while state.running:
             glColor4f( 1, 0, 0, 0.2 )
             glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
     
-    glUseProgram( shaderProgramLines if state.shader else 0 )
+    glUseProgram( shaderProgramLines )
+    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( state.view ) )
+    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
+    glUniform1f( shaderSides, state.shader )
+    glUniform1i( shaderMinLines, 1 )
 
     if selectedRegion is not None:
         with verticesBO:
@@ -456,9 +507,9 @@ while state.running:
 
     glDepthMask( GL_FALSE )
 
-    scale = np.identity( 4 )
-    scale[:3] *= 1.002
-    glLoadMatrixf( scale.dot( state.mvp() ) )
+    scaledView = glm.scale( state.view, ( 1.002, 1.002, 1.002 ) )
+    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( scaledView ) )
+    glUniform1i( shaderMinLines, 2 )
 
     if state.delauney:
         with verticesBO:
@@ -470,7 +521,9 @@ while state.running:
 
     glDepthMask( state.maskWrite )
     
-    glUseProgram( 0 )
+    glUseProgram( shaderProgramPoints )
+    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( scaledView ) )
+    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
                 
     if state.points:
         with verticesBO:
@@ -484,6 +537,7 @@ while state.running:
                 glColor4f( 0.9, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
 
+    glUseProgram( 0 )
     glLoadMatrixf( state.ortho() )
     glBlendFunc( GL_SRC_ALPHA, GL_ONE )
 
