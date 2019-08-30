@@ -3,10 +3,10 @@ from scipy.spatial import SphericalVoronoi
 
 import pygame
 from OpenGL.GL import *
-from OpenGL.GLU import *
 from OpenGL.arrays import vbo
 import glm
 import itertools as it
+from pathlib import Path
 
 pygame.init()
 pygameFlags = pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF
@@ -35,83 +35,28 @@ verticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
 glEnableClientState( GL_VERTEX_ARRAY )
 
 vtxShader = glCreateShader( GL_VERTEX_SHADER )
-glShaderSource( vtxShader, """
-
-    #version 140
-
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    mat4 mvp = proj * view;
-    
-    void main() {
-        gl_Position = mvp * gl_Vertex;
-        gl_FrontColor = gl_Color;
-    }
-""")
+glShaderSource( vtxShader, Path( __file__ ).with_name( 'vertex.glsl' ).read_text() )
 glCompileShader( vtxShader )
 
 if glGetShaderiv( vtxShader, GL_COMPILE_STATUS ) != GL_TRUE:
-    message = glGetShaderInfoLog( vtxShader )
-    raise RuntimeError( message )
+    raise RuntimeError( glGetShaderInfoLog( vtxShader ).decode() )
 
 shaderProgramPoints = glCreateProgram()
 glAttachShader( shaderProgramPoints, vtxShader )
 glLinkProgram( shaderProgramPoints )
 
 if glGetProgramiv( shaderProgramPoints, GL_LINK_STATUS ) != GL_TRUE:
-    message = glGetProgramInfoLog( shaderProgramPoints )
-    raise RuntimeError( message )
+    raise RuntimeError(  glGetProgramInfoLog( shaderProgramPoints ).decode() )
 
-shaderView = glGetUniformLocation( shaderProgramPoints, "view" )
-shaderProj = glGetUniformLocation( shaderProgramPoints, "proj" )
+shaderProgramPointsView = glGetUniformLocation( shaderProgramPoints, "view" )
+shaderProgramPointsProj = glGetUniformLocation( shaderProgramPoints, "proj" )
 
 lineShader = glCreateShader( GL_GEOMETRY_SHADER )
-glShaderSource( lineShader, """
-
-    #version 150
-
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    uniform float sides;
-    uniform int minLines;
-
-    mat4 mvp = proj * view;
-    mat4 invMvp = inverse( mvp );
-
-    layout( lines ) in;
-    layout( line_strip, max_vertices = 17 ) out;
-
-    void main()
-    {
-        float length = distance( invMvp * gl_in[0].gl_Position, 
-                                 invMvp * gl_in[1].gl_Position );
-
-        int lines = max( minLines, int( ceil( sides * length ) ) );
-
-        for( int i = 0; i <= lines; i++ ) {
-            float a = float( i ) / float( lines );
-
-            vec4 middle = mix( gl_in[0].gl_Position, gl_in[1].gl_Position, a );
-            vec4 middleWorld = invMvp * middle;
-
-            middleWorld.xyz = normalize( middleWorld.xyz );
-
-            gl_Position = mvp * middleWorld;
-            gl_FrontColor = mix( gl_in[0].gl_FrontColor, gl_in[1].gl_FrontColor, a );
-                
-            EmitVertex();
-        }
-        
-        EndPrimitive();
-    }
-""" )
+glShaderSource( lineShader, Path( __file__ ).with_name( 'lines.glsl' ).read_text() )
 glCompileShader( lineShader )
 
 if glGetShaderiv( lineShader, GL_COMPILE_STATUS ) != GL_TRUE:
-    message = glGetShaderInfoLog( lineShader )
-    raise RuntimeError( message )
+    raise RuntimeError(glGetShaderInfoLog( lineShader ).decode() )
 
 shaderProgramLines = glCreateProgram()
 glAttachShader( shaderProgramLines, vtxShader )
@@ -119,73 +64,19 @@ glAttachShader( shaderProgramLines, lineShader )
 glLinkProgram( shaderProgramLines )
 
 if glGetProgramiv( shaderProgramLines, GL_LINK_STATUS ) != GL_TRUE:
-    message = glGetProgramInfoLog( shaderProgramLines )
-    raise RuntimeError( message )
+    raise RuntimeError( glGetProgramInfoLog( shaderProgramLines ).decode() )
 
-assert shaderView == glGetUniformLocation( shaderProgramLines, "view" )
-assert shaderProj == glGetUniformLocation( shaderProgramLines, "proj" )
-shaderSides = glGetUniformLocation( shaderProgramLines, "sides" )
-shaderMinLines = glGetUniformLocation( shaderProgramLines, "minLines" )
+shaderProgramLinesView = glGetUniformLocation( shaderProgramLines, "view" )
+shaderProgramLinesProj = glGetUniformLocation( shaderProgramLines, "proj" )
+shaderProgramLinesSides = glGetUniformLocation( shaderProgramLines, "sides" )
+shaderProgramLinesMinOut = glGetUniformLocation( shaderProgramLines, "minOut" )
 
 triShader = glCreateShader( GL_GEOMETRY_SHADER )
-glShaderSource( triShader, """
-
-    #version 150
-
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    uniform float sides;
-    uniform int minLines;
-    
-    mat4 mvp = proj * view;
-    mat4 invMvp = inverse( mvp );
-
-    layout( triangles ) in;
-    layout( triangle_strip, max_vertices = 48 ) out;
-
-    void main()
-    {
-        vec4 lastPos = gl_in[1].gl_Position;
-        vec4 lastCol = gl_in[1].gl_FrontColor;
-
-        float length = distance( invMvp * gl_in[1].gl_Position, 
-                                 invMvp * gl_in[2].gl_Position );
-
-        int lines = max( minLines, int( ceil( sides * length ) ) );
-
-        for( int i = 1; i <= lines; i++ ) {
-            gl_Position = gl_in[0].gl_Position;
-            gl_FrontColor = gl_in[0].gl_FrontColor;
-            EmitVertex();
-
-            gl_Position = lastPos;
-            gl_FrontColor = lastCol;
-            EmitVertex();
-
-            float a = float( i ) / float( lines );
-
-            vec4 middle = mix( gl_in[1].gl_Position, gl_in[2].gl_Position, a );
-            vec4 middleWorld = invMvp * middle;
-
-            middleWorld.xyz = normalize( middleWorld.xyz );
-
-            lastPos = mvp * middleWorld;  // middle;
-            lastCol = mix( gl_in[1].gl_FrontColor, gl_in[2].gl_FrontColor, a );
-
-            gl_Position = lastPos;
-            gl_FrontColor = lastCol;
-            EmitVertex();
-            
-            EndPrimitive();
-        }
-    }
-""" )
+glShaderSource( triShader, Path( __file__ ).with_name( 'tris.glsl' ).read_text() )
 glCompileShader( triShader )
 
 if glGetShaderiv( triShader, GL_COMPILE_STATUS ) != GL_TRUE:
-    message = glGetShaderInfoLog( triShader )
-    raise RuntimeError( message )
+    raise RuntimeError( glGetShaderInfoLog( triShader ).decode() )
 
 shaderProgramTris = glCreateProgram()
 glAttachShader( shaderProgramTris, vtxShader )
@@ -193,13 +84,12 @@ glAttachShader( shaderProgramTris, triShader )
 glLinkProgram( shaderProgramTris )
 
 if glGetProgramiv( shaderProgramTris, GL_LINK_STATUS ) != GL_TRUE:
-    message = glGetProgramInfoLog( shaderProgramTris )
-    raise RuntimeError( message )
+    raise RuntimeError( glGetProgramInfoLog( shaderProgramTris ) )
 
-assert shaderView == glGetUniformLocation( shaderProgramTris, "view" )
-assert shaderProj == glGetUniformLocation( shaderProgramTris, "proj" )
-shaderSidesTri = glGetUniformLocation( shaderProgramTris, "sides" )
-assert shaderSides == shaderSidesTri
+shaderProgramTrisView = glGetUniformLocation( shaderProgramTris, "view" )
+shaderProgramTrisProj = glGetUniformLocation( shaderProgramTris, "proj" )
+shaderProgramTrisSides = glGetUniformLocation( shaderProgramTris, "sides" )
+shaderProgramTrisMinOut = glGetUniformLocation( shaderProgramTris, "minOut" )
 
 class GameState:
     selection   = None
@@ -461,10 +351,10 @@ while state.running:
     glPolygonMode( GL_FRONT_AND_BACK, GL_LINE if state.wireframe else GL_FILL )
        
     glUseProgram( shaderProgramTris )
-    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( state.view ) )
-    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
-    glUniform1f( shaderSides, state.shader )
-    glUniform1i( shaderMinLines, 1 )
+    glUniformMatrix4fv( shaderProgramTrisView, 1, False, glm.value_ptr( state.view ) )
+    glUniformMatrix4fv( shaderProgramTrisProj, 1, False, glm.value_ptr( state.proj ) )
+    glUniform1f( shaderProgramTrisSides, state.shader )
+    glUniform1i( shaderProgramTrisMinOut, 1 )
 
     if state.voronoi:
         zOrder = np.argsort( np.dot( vertices, state.camera() ) )
@@ -485,10 +375,10 @@ while state.running:
             glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
     
     glUseProgram( shaderProgramLines )
-    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( state.view ) )
-    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
-    glUniform1f( shaderSides, state.shader )
-    glUniform1i( shaderMinLines, 1 )
+    glUniformMatrix4fv( shaderProgramLinesView, 1, False, glm.value_ptr( state.view ) )
+    glUniformMatrix4fv( shaderProgramLinesProj, 1, False, glm.value_ptr( state.proj ) )
+    glUniform1f( shaderProgramLinesSides, state.shader )
+    glUniform1i( shaderProgramLinesMinOut, 1 )
 
     if selectedRegion is not None:
         with verticesBO:
@@ -508,8 +398,8 @@ while state.running:
     glDepthMask( GL_FALSE )
 
     scaledView = glm.scale( state.view, ( 1.002, 1.002, 1.002 ) )
-    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( scaledView ) )
-    glUniform1i( shaderMinLines, 2 )
+    glUniformMatrix4fv( shaderProgramLinesView, 1, False, glm.value_ptr( scaledView ) )
+    glUniform1i( shaderProgramLinesMinOut, 2 )
 
     if state.delauney:
         with verticesBO:
@@ -522,8 +412,8 @@ while state.running:
     glDepthMask( state.maskWrite )
     
     glUseProgram( shaderProgramPoints )
-    glUniformMatrix4fv( shaderView, 1, False, glm.value_ptr( scaledView ) )
-    glUniformMatrix4fv( shaderProj, 1, False, glm.value_ptr( state.proj ) )
+    glUniformMatrix4fv( shaderProgramPointsView, 1, False, glm.value_ptr( scaledView ) )
+    glUniformMatrix4fv( shaderProgramPointsProj, 1, False, glm.value_ptr( state.proj ) )
                 
     if state.points:
         with verticesBO:
