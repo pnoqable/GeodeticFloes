@@ -5,6 +5,7 @@ import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.arrays import vbo
+from OpenGL.GL.ARB.compute_shader import *
 import glm
 import itertools as it
 
@@ -16,6 +17,12 @@ np.random.seed()
 vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
 vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
 translations = np.zeros( vertices.shape, dtype = 'float32' )
+
+print( "GL_VERSION: " + glGetString( GL_VERSION ).decode() )
+print( "GL_EXTENSIONS:" )
+for ext in sorted( glGetString( GL_EXTENSIONS ).decode().split() ):
+    print( "    " + ext )
+print( "glInitComputeShaderARB() -> " + str( glInitComputeShaderARB() ) )
 
 glEnable( GL_DEPTH_TEST )
 glDepthFunc( GL_LEQUAL )
