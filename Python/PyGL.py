@@ -13,8 +13,12 @@ pygameFlags = pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF
 screen = pygame.display.set_mode( ( 800, 600 ), pygameFlags, 24 )
 
 np.random.seed()
-vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
-vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+# vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
+# vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+indices = np.arange( 72 ).astype( 'float32' ) + 0.5
+phi = np.arccos( 1 - 2 * indices / indices.shape[0] )
+theta = np.pi * ( 1 + 5 ** 0.5 ) * indices
+vertices = np.array( [ np.cos( theta ) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi) ] ).T
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
 glEnable( GL_DEPTH_TEST )
