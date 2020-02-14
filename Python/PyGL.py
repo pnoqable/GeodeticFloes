@@ -13,12 +13,8 @@ pygameFlags = pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF
 screen = pygame.display.set_mode( ( 800, 600 ), pygameFlags, 24 )
 
 np.random.seed()
-# vertices = np.random.sample( ( 32, 3 ) ).astype( 'float32' ) - 0.5
-# vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
-indices = np.arange( 72 ).astype( 'float32' ) + 0.5
-phi = np.arccos( 1 - 2 * indices / indices.shape[0] )
-theta = np.pi * ( 1 + 5 ** 0.5 ) * indices
-vertices = np.array( [ np.cos( theta ) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi) ] ).T
+vertices = np.random.sample( ( 1000, 3 ) ).astype( 'float32' ) - 0.5
+vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
 glEnable( GL_DEPTH_TEST )
@@ -100,7 +96,7 @@ class GameState:
     idsToRemove = None
     pointsToAdd = None
 
-    freeze      = True
+    frames      = 0
     repulsion   = 0.00005
     deccelerate = 0
     
@@ -209,7 +205,7 @@ while state.running:
         mod = 1 if 'mod' in e.dict and int( e.mod ) & ( 64 + 128 ) else 0 # left or right CTRL
         mod2 = 1 if 'mod' in e.dict and int( e.mod ) & ( 1 + 2 ) else 0 # left or right SHIFT
         if e.type == pygame.QUIT or \
-           e.type == pygame.KEYDOWN and e.key == 27: # ESC
+           e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
             state.running = False
         elif e.type == pygame.VIDEORESIZE:
             state.setResolution( ( e.w, e.h ) )
@@ -225,6 +221,7 @@ while state.running:
             if interception is not None and state.selection is not None:
                 vertices[state.selection] = interception / np.linalg.norm( interception )
                 translations[state.selection] = 0
+                if 'sv' in globals(): del sv
         elif e.type == pygame.MOUSEMOTION and e.buttons in [ ( 0, 0, 1 ), ( 0, 1, 0 ) ]:
             lastPos = unprojectToSphereNear( np.array( e.pos ) - e.rel, True )
             currPos = unprojectToSphereNear( np.array( e.pos ), True )
@@ -240,9 +237,16 @@ while state.running:
         elif e.type == pygame.KEYDOWN and e.key == 47: # '-'
             count = min( pow( 10, mod ) * pow( 100, mod2 ), vertices.shape[0] - 4 )
             state.idsToRemove = vertices.shape[0] - count + np.arange( count )
-        elif e.type == pygame.KEYDOWN and e.key == 127: # DEL
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_DELETE:
             if state.selection is not None and vertices.shape[0] > 4:
                 state.idsToRemove = [state.selection]
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+            indices = np.arange( vertices.shape[0] ).astype( 'float32' ) + 0.5
+            phi = np.arccos( 1 - 2 * indices / indices.shape[0] )
+            theta = np.pi * ( 1 + 5 ** 0.5 ) * indices
+            vertices = np.array( [ np.cos( theta ) * np.sin(phi), np.cos(phi), np.sin(theta) * np.sin(phi) ] ).T
+            translations[:] = 0
+            if 'sv' in globals(): del sv
         elif e.type == pygame.KEYDOWN and e.unicode == 'p':
             state.points = not state.points
         elif e.type == pygame.KEYDOWN and e.unicode == 'd':
@@ -251,7 +255,7 @@ while state.running:
             state.voronoi = not state.voronoi
         elif e.type == pygame.KEYDOWN and e.unicode == 'b':
             state.borders = not state.borders
-        elif e.type == pygame.KEYDOWN and e.key == 97: # 'a'
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_a:
             state.alpha -= 0.1 * pow( 10, mod ) * pow( -1, mod2 )
             state.alpha = max( 0, min( 1, state.alpha ) )
         elif e.type == pygame.KEYDOWN and e.unicode == 'c':
@@ -261,19 +265,21 @@ while state.running:
         elif e.type == pygame.KEYDOWN and e.unicode == 'M':
             state.maskClear = not state.maskClear
             state.maskWrite = state.maskClear
-        elif e.type == pygame.KEYDOWN and e.key == 115: # 's'
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
             state.shader -= pow( 8, mod ) * pow( -1, mod2 )
             state.shader = max( 1, min( 8, state.shader ) )
         elif e.type == pygame.KEYDOWN and e.unicode == 'w':
             state.wireframe = not state.wireframe
-        elif e.type == pygame.KEYDOWN and e.unicode == 'f':
-            state.freeze = not state.freeze
-        elif e.type == pygame.KEYDOWN and e.key == 32: # ' '
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_f:
+            state.frames -= pow( 10, mod ) * pow( -1, mod2 )
+            state.frames = max( 0, state.frames )
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE:
             state.deccelerate = 0.2 * pow( 10, mod ) * pow( -1, mod2 )
-            state.freeze = False
-        elif e.type == pygame.KEYUP and e.key == 32: # ' '
+            if state.frames == 0:
+                state.frames = 1
+        elif e.type == pygame.KEYUP and e.key == pygame.K_SPACE:
             state.deccelerate = 0
-        elif e.type == pygame.KEYDOWN and e.key == 114: # 'r'
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_r:
             state.repulsion -= 0.000001 * pow( 10, mod ) * pow( -1, mod2 )
             state.repulsion = max( 0, round( state.repulsion, 6 ) )
 
@@ -283,14 +289,16 @@ while state.running:
         if state.selection in state.idsToRemove:
             state.selection = None
         state.idsToRemove = None
+        if 'sv' in globals(): del sv
 
     if state.pointsToAdd is not None:
         state.pointsToAdd /= np.linalg.norm( state.pointsToAdd, axis=1 )[:,np.newaxis]
         vertices = np.append( vertices, state.pointsToAdd, axis = 0 )
         translations = np.append( translations, np.zeros_like( state.pointsToAdd ), axis = 0 )
         state.pointsToAdd = None
+        if 'sv' in globals(): del sv
     
-    if not state.freeze:
+    for _ in range( state.frames ):
         state.resetStats()
 
         def calcRejectionFor( i ):
@@ -316,26 +324,29 @@ while state.running:
 
         vertices += translations
         vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+
+    if state.frames or 'sv' not in globals():
     
-    sv = SphericalVoronoi( vertices )
+        sv = SphericalVoronoi( vertices )
 
-    sv.sort_vertices_of_regions()
-    for region in sv.regions:
-        a = sv.vertices[region[0]]
-        b = sv.vertices[region[1]]
-        c = sv.vertices[region[2]]
-        if np.sum( np.cross( b - a, c - b ) * b ) < 0:
-            region.reverse()
+        sv.sort_vertices_of_regions()
+        for region in sv.regions:
+            a = sv.vertices[region[0]]
+            b = sv.vertices[region[1]]
+            c = sv.vertices[region[2]]
+            if np.sum( np.cross( b - a, c - b ) * b ) < 0:
+                region.reverse()
 
-    verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
+        verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
 
-    hull = sv._tri
+        hull = sv._tri
+        
+        regions = np.array( [np.array(region).astype( 'uint32' ) for region in sv.regions] ) + vertices.shape[0]
+
+        def face( i, region ): return np.concatenate( ( [i], region, [region[0]] ) )
+        faces = np.array( [ face( i, region ) for ( i, region ) in zip( it.count(), regions ) ] )
     
-    regions = np.array( [np.array(region).astype( 'uint32' ) for region in sv.regions] ) + vertices.shape[0]
     selectedRegion = regions[state.selection] if state.selection is not None else None
-
-    def face( i, region ): return np.concatenate( ( [i], region, [region[0]] ) )
-    faces = np.array( [ face( i, region ) for ( i, region ) in zip( it.count(), regions ) ] )
     selectedFace = faces[ state.selection ] if state.selection is not None else None
 
     glClearColor( 0.2, 0.4, 0.4, 1.0 )
@@ -450,7 +461,7 @@ while state.running:
     drawText( (0,0,0), 24, "Voronoi Faces: " + str( vertices.shape[0] ) + "\n" + \
                            "Delauney Faces: " + str( vertices.shape[0] * 2 - 4 ) + "\n" + \
                            "Repulsion: " + str( round( 1000000 * state.repulsion ) ) + "uf^-2\n"
-                           "Dmin: " + str( int( 1000 * state.dmin ) ) + "mU\n" + \
+                           "Dmin: " + str( int( 1000000 * state.dmin ) ) + "uU\n" + \
                            "Temperature: " + str( int( 1000000 * state.temperature ) ) + "uU²/f²" )
 
     pygame.display.flip ()
