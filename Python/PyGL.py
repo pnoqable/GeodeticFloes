@@ -31,7 +31,7 @@ glEnable( GL_CULL_FACE )
 glEnable( GL_POINT_SMOOTH )
 glEnable( GL_LINE_SMOOTH )
 
-verticesBO = vbo.VBO( np.zeros( (0,3), dtype = 'float32' ) )
+verticesBO = vbo.VBO( np.zeros( 0, dtype = 'float32' ) )
 glEnableClientState( GL_VERTEX_ARRAY )
 
 vtxShader = glCreateShader( GL_VERTEX_SHADER )
@@ -337,17 +337,44 @@ while state.running:
             if np.sum( np.cross( b - a, c - b ) * b ) < 0:
                 region.reverse()
 
-        verticesBO.set_array( np.append( vertices, sv.vertices ).astype( 'float32' ) )
+        links = [set() for _ in vertices]
+        for simplex in sv._tri.simplices:
+            last = simplex[-1]
+            for curr in simplex:
+                links[last].add( curr )
+                links[curr].add( last )
+                last = curr
 
-        hull = sv._tri
+        allLinks = np.concatenate( [ [ i, e ] for i, ends in enumerate( links ) for e in ends ] )
         
-        regions = np.array( [np.array(region).astype( 'uint32' ) for region in sv.regions] ) + vertices.shape[0]
+        regions = np.frompyfunc( np.array, 1, 1 )( sv.regions ) + vertices.shape[0]
 
-        def face( i, region ): return np.concatenate( ( [i], region, [region[0]] ) )
-        faces = np.array( [ face( i, region ) for ( i, region ) in zip( it.count(), regions ) ] )
+        tris = [[] for _ in regions]
+        borders = [[] for _ in regions]
+        for i, region in enumerate( regions ):
+                last = region[-1]
+                for curr in region:
+                    tris[i].extend( ( i, last, curr ) )
+                    borders[i].extend( ( last, curr ) )
+                    last = curr
+
+        tris = np.frompyfunc( np.array, 1, 1 )( tris )
+        borders = np.frompyfunc( np.array, 1, 1 )( borders )
+        allBorders = np.concatenate( borders )
+
+        # todo: pass neighbors as gl_PrimitiveID to shader and calculate color there
+        neighbors = np.frompyfunc( len, 1, 1 )( links )
+        brightnesses = 1.3 - 0.1 * neighbors[:,np.newaxis]
+        alphas = state.alpha + ( 1 - state.alpha ) * brightnesses
+        colors = np.hstack( ( brightnesses, brightnesses, brightnesses, alphas ) ).astype( 'float32' )
+        colors = np.append( colors, np.ones( ( len( sv.vertices ), 4 ), dtype='float32' ) )
+
+        allVertices = np.append( vertices, sv.vertices ).astype( 'float32' )
+        allVerticeswithColors = np.append( allVertices, colors )
+        verticesBO.set_array( allVerticeswithColors )
     
-    selectedRegion = regions[state.selection] if state.selection is not None else None
-    selectedFace = faces[ state.selection ] if state.selection is not None else None
+    selectedBorder = borders[state.selection] if state.selection is not None else None
+    selectedTris = tris[state.selection] if state.selection is not None else None
 
     glClearColor( 0.2, 0.4, 0.4, 1.0 )
     glClear( GL_COLOR_BUFFER_BIT )
@@ -373,21 +400,21 @@ while state.running:
 
     if state.voronoi:
         zOrder = np.argsort( np.dot( vertices, state.camera() ) )
+        allTris = np.concatenate( tris[zOrder] )
         with verticesBO:
-            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 1 )
-            for face in faces[zOrder]:
-                brightness = 1.5 - 0.1 * face.shape[0]
-                alpha = state.alpha - brightness * state.alpha + brightness
-                glColor4f( brightness, brightness, brightness, alpha )
-                glDrawElements( GL_TRIANGLE_FAN, face.shape[0], GL_UNSIGNED_INT, face )
+            glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
+            glEnableClientState( GL_COLOR_ARRAY )
+            glColorPointer( 4, GL_FLOAT, 0, verticesBO + allVertices.nbytes )
+            glDrawElements( GL_TRIANGLES, len( allTris ), GL_UNSIGNED_INT, allTris )
+            glDisableClientState(  GL_COLOR_ARRAY )
 
     glPolygonMode( GL_FRONT_AND_BACK, GL_FILL )
                 
-    if selectedFace is not None:
+    if selectedTris is not None:
         with verticesBO:
             glColor4f( 1, 0, 0, 0.2 )
-            glDrawElements( GL_TRIANGLE_FAN, selectedFace.shape[0], GL_UNSIGNED_INT, selectedFace )
+            glDrawElements( GL_TRIANGLES, selectedTris.shape[0], GL_UNSIGNED_INT, selectedTris )
     
     glUseProgram( shaderProgramLines )
     glUniformMatrix4fv( shaderProgramLinesView, 1, False, glm.value_ptr( state.view ) )
@@ -395,20 +422,19 @@ while state.running:
     glUniform1f( shaderProgramLinesSides, state.shader )
     glUniform1i( shaderProgramLinesMinOut, 1 )
 
-    if selectedRegion is not None:
+    if selectedBorder is not None:
         with verticesBO:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 2 )
             glColor4f( 1, 0, 0, 0.5 )
-            glDrawElements( GL_LINE_LOOP, len( selectedRegion ), GL_UNSIGNED_INT, selectedRegion )
+            glDrawElements( GL_LINE_LOOP, len( selectedBorder ), GL_UNSIGNED_INT, selectedBorder )
 
     if state.borders:
         with verticesBO:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 1 )
             glColor4f( 0, 0, 0, 0.2 if not state.wireframe or not state.voronoi else 1 )
-            for region in regions:
-                glDrawElements( GL_LINE_LOOP, len( region ), GL_UNSIGNED_INT, region )
+            glDrawElements( GL_LINES, len( allBorders ), GL_UNSIGNED_INT, allBorders )
 
     glDepthMask( GL_FALSE )
 
@@ -421,8 +447,7 @@ while state.running:
             glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
             glLineWidth( 1 )
             glColor4f( 0, 0, 1, 0.2 )
-            for simplex in hull.simplices:
-                glDrawElements( GL_LINE_LOOP, simplex.shape[0], GL_UNSIGNED_INT, simplex )
+            glDrawElements( GL_LINES, len( allLinks ), GL_UNSIGNED_INT, allLinks )
 
     glDepthMask( state.maskWrite )
     

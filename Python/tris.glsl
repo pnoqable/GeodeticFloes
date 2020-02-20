@@ -15,7 +15,6 @@ layout( triangle_strip, max_vertices = 48 ) out;
 void main()
 {
     vec4 lastPos = gl_in[1].gl_Position;
-    vec4 lastCol = gl_in[1].gl_FrontColor;
 
     float length = distance( invMvp * gl_in[1].gl_Position, invMvp * gl_in[2].gl_Position );
 
@@ -27,7 +26,7 @@ void main()
         EmitVertex();
 
         gl_Position = lastPos;
-        gl_FrontColor = lastCol;
+        gl_FrontColor = gl_in[0].gl_FrontColor;
         EmitVertex();
 
         float a = float( i ) / float( lines );
@@ -38,10 +37,9 @@ void main()
         middleWorld.xyz = normalize( middleWorld.xyz );
 
         lastPos = mvp * middleWorld;  // middle;
-        lastCol = mix( gl_in[1].gl_FrontColor, gl_in[2].gl_FrontColor, a );
 
         gl_Position = lastPos;
-        gl_FrontColor = lastCol;
+        gl_FrontColor = gl_in[0].gl_FrontColor;
         EmitVertex();
         
         EndPrimitive();
