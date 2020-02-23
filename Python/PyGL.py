@@ -120,6 +120,7 @@ class GameState:
 
     frames      = 0
     repulsion   = 5e-06
+    maxRange    = 0.333
     friction    = 100
     
     temperature = 0
@@ -314,13 +315,23 @@ while state.running:
     def simulateRejection():
         global vertices, translations
 
+        verticesMasks = vertices < np.zeros( 3 )
+        verticesHalfs = np.array( [
+            [ vertices[verticesMasks[:,0]], vertices[~verticesMasks[:,0]] ],
+            [ vertices[verticesMasks[:,1]], vertices[~verticesMasks[:,1]] ],
+            [ vertices[verticesMasks[:,2]], vertices[~verticesMasks[:,2]] ] ] )
+         
         def calcRejectionFor( i ):
-            diffs = vertices[i] - vertices
+            vertex = vertices[i]
+            halfDimension = np.argmax( np.absolute( vertex ) )
+            halfSpace = 0 if vertex[halfDimension] < 0 else 1
+            diffs = vertex - verticesHalfs[halfDimension, halfSpace]
             dists = np.square( diffs ).sum( axis = 1 )
             diffs /= dists[:,np.newaxis]
             dists **= 0.5
             diffs /= dists[:,np.newaxis]
-            return np.nansum( diffs, axis = 0 )
+            inRange = dists <= state.maxRange
+            return np.nansum( diffs[inRange], axis = 0 )
 
         translationsSquared = np.square( translations ).sum( axis = 1 )
         translations *= np.power( np.e, -state.friction*translationsSquared )[:,np.newaxis]
@@ -495,6 +506,21 @@ while state.running:
         glUniformMatrix4fv( shaderProgramPointsView, 1, False, glm.value_ptr( scaledView ) )
         glUniformMatrix4fv( shaderProgramPointsProj, 1, False, glm.value_ptr( state.proj ) )
 
+        def grow( start, maxRange ):
+            result = [ start ]
+            visited = np.zeros( vertices.shape[0], dtype = bool )
+            visited[start] = True
+            outline = list( links[start] )
+            startVertex = vertices[ start ]
+            maxRangeSquared = maxRange ** 2
+            while len( outline ) > 0:
+                i = outline.pop()
+                visited[i] = True
+                if np.square( startVertex - vertices[i] ).sum() <= maxRangeSquared:
+                    result.append( i )
+                    outline += [ link for link in links[i] if not visited[link] ]
+            return result
+                
         if state.points:
             glPointSize( 5 )
             glColor4f( 0, 0, 1, 0.5 )
@@ -504,6 +530,10 @@ while state.running:
                 glPointSize( 6 )
                 glColor4f( 0.8, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
+
+                    glPointSize( 5 )
+                    rejected = grow( state.selection, state.maxRange )[1:]
+                    glDrawElements( GL_POINTS, len( rejected ), GL_UNSIGNED_INT, rejected )
 
         glUseProgram( 0 )
         glLoadMatrixf( state.ortho() )
