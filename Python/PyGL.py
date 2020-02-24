@@ -121,7 +121,7 @@ class GameState:
     wireframe   = False
 
     def __init__( self ):
-        self.view = glm.translate( glm.mat4(), ( 0, 0, -3 ) )
+        self.view = glm.translate( glm.mat4( 1.0 ), glm.vec3( 0, 0, -3 ) )
 
     def setResolution( self, res ):
         self.resolution = res
@@ -135,18 +135,18 @@ class GameState:
         return invMvp[2,:3] / invMvp[2,3]
 
     def rotate( self, a, b ):
-        a = glm.normalize( a )
-        b = glm.normalize( b )
-        cosArc = glm.dot( a, b )
+        a /= np.linalg.norm( a )
+        b /= np.linalg.norm( b )
+        cosArc = ( a * b ).sum()
         if cosArc <= -1:
-            self.view = glm.scale( self.view, ( -1, -1, -1 ) )
+            self.view = glm.scale( self.view, glm.vec3( -1, 1, -1 ) )
         elif cosArc < 1:
-            angle = glm.acos( cosArc )
-            axis = glm.cross( a, b ) 
-            self.view = glm.rotate( self.view, angle, axis )
+            angle = np.arccos( cosArc )
+            axis = np.cross( a, b ) 
+            self.view = glm.rotate( self.view, angle, glm.vec3( axis ) )
 
     def zoom( self, exp ):
-        self.view[3,2] *= glm.pow( 1.1, exp )
+        self.view[3,2] *= 1.1 ** exp
 
     def ortho( self ):
         ortho = glm.ortho( 0, self.resolution[0], 0, self.resolution[1], 0, 1 )
@@ -438,7 +438,7 @@ while state.running:
 
     glDepthMask( GL_FALSE )
 
-    scaledView = glm.scale( state.view, ( 1.002, 1.002, 1.002 ) )
+    scaledView = glm.scale( state.view, glm.vec3( 1.002, 1.002, 1.002 ) )
     glUniformMatrix4fv( shaderProgramLinesView, 1, False, glm.value_ptr( scaledView ) )
     glUniform1i( shaderProgramLinesMinOut, 2 )
 
