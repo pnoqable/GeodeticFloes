@@ -110,8 +110,8 @@ class GameState:
     pointsToAdd = None
 
     frames      = 0
-    repulsion   = 0.00005
-    deccelerate = 0
+    repulsion   = 5e-06
+    friction    = 100
     
     dmin        = 2
     temperature = 0
@@ -284,11 +284,11 @@ while state.running:
             state.frames -= pow( 10, mod ) * pow( -1, mod2 )
             state.frames = max( 0, state.frames )
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE:
-            state.deccelerate = 0.2 * pow( 10, mod ) * pow( -1, mod2 )
+            state.friction = 10000 * pow( 10, mod ) * pow( -1, mod2 )
             if state.frames == 0:
                 state.frames = 1
         elif e.type == pygame.KEYUP and e.key == pygame.K_SPACE:
-            state.deccelerate = 0
+            state.friction = 100
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_r:
             state.repulsion -= 0.000001 * pow( 10, mod ) * pow( -1, mod2 )
             state.repulsion = max( 0, round( state.repulsion, 6 ) )
@@ -321,14 +321,13 @@ while state.running:
             return rejection
 
         translationsSquared = np.square( translations ).sum( axis = 1 )
-        translations *= np.power( np.e, -10*translationsSquared )[:,np.newaxis]
+        translations *= np.power( np.e, -state.friction*translationsSquared )[:,np.newaxis]
 
         for i in range( vertices.shape[0] ):
             translations[i] += state.repulsion * calcRejectionFor( i )
 
         projections = np.sum( vertices * translations, axis = 1 )
         translations -= vertices * projections[:,np.newaxis]
-        translations *= pow( np.e, -state.deccelerate )
         state.temperature = np.square( translations ).sum()
 
         vertices += translations
