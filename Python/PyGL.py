@@ -315,17 +315,15 @@ while state.running:
     def simulateRejection():
         global vertices, translations
 
-        verticesMasks = vertices < np.zeros( 3 )
-        verticesHalfs = np.array( [
-            [ vertices[verticesMasks[:,0]], vertices[~verticesMasks[:,0]] ],
-            [ vertices[verticesMasks[:,1]], vertices[~verticesMasks[:,1]] ],
-            [ vertices[verticesMasks[:,2]], vertices[~verticesMasks[:,2]] ] ] )
+        # todo optimize matrix calculation by duplicating and mirroring projections:
+        halfNormals = np.array( [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]], dtype = float )
+        verticesProjections = np.dot( halfNormals, vertices.T )
+        verticesMasks = verticesProjections > 0
+        verticesHalfs = np.array( [ vertices[mask] for mask in verticesMasks ] )
          
         def calcRejectionFor( i ):
-            vertex = vertices[i]
-            halfDimension = np.argmax( np.absolute( vertex ) )
-            halfSpace = 0 if vertex[halfDimension] < 0 else 1
-            diffs = vertex - verticesHalfs[halfDimension, halfSpace]
+            halfSpace = np.argmax( verticesProjections[:,i] )
+            diffs = vertices[i] - verticesHalfs[halfSpace]
             dists = np.square( diffs ).sum( axis = 1 )
             diffs /= dists[:,np.newaxis]
             dists **= 0.5
