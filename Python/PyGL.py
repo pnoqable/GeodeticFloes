@@ -282,11 +282,10 @@ while state.running:
             state.wireframe = not state.wireframe
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_f:
             state.frames -= pow( 10, mod ) * pow( -1, mod2 )
-            state.frames = max( 0, state.frames )
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE:
             state.friction = 10000 * pow( 10, mod ) * pow( -1, mod2 )
             if state.frames == 0:
-                state.frames = 1
+                state.frames = -1
         elif e.type == pygame.KEYUP and e.key == pygame.K_SPACE:
             state.friction = 100
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_r:
@@ -307,7 +306,7 @@ while state.running:
         state.pointsToAdd = None
         if 'sv' in globals(): del sv
     
-    for _ in range( state.frames ):
+    for _ in range( 1 if state.frames < 0 else state.frames ):
         state.resetStats()
 
         def calcRejectionFor( i ):
@@ -381,6 +380,9 @@ while state.running:
         allVerticeswithColors = np.append( allVertices, colors )
         verticesBO.set_array( allVerticeswithColors )
     
+    if state.frames < 0:
+        state.frames += 1
+
     selectedBorder = borders[state.selection] if state.selection is not None else None
     selectedTris = tris[state.selection] if state.selection is not None else None
 
@@ -491,7 +493,8 @@ while state.running:
             glDrawPixels( surface.get_width(), surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, pixels )
             pos = ( pos[0], pos[1] + surface.get_height(), pos[2] )
 
-    drawText( (0,0,0), 24, "Voronoi Faces: " + str( vertices.shape[0] ) + "\n" + \
+    drawText( (0,0,0), 24, "Frames: " + str( state.frames ) + "\n" + \
+                           "Voronoi Faces: " + str( vertices.shape[0] ) + "\n" + \
                            "Delauney Faces: " + str( vertices.shape[0] * 2 - 4 ) + "\n" + \
                            "Repulsion: " + str( round( 1000000 * state.repulsion ) ) + "uf^-2\n"
                            "Dmin: " + str( int( 1000000 * state.dmin ) ) + "uU\n" + \
