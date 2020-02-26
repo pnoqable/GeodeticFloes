@@ -119,7 +119,6 @@ class GameState:
     repulsion   = 5e-06
     friction    = 100
     
-    dmin        = 2
     temperature = 0
 
     resolution  = None
@@ -170,9 +169,6 @@ class GameState:
     def ortho( self ):
         ortho = glm.ortho( 0, self.resolution[0], 0, self.resolution[1], 0, 1 )
         return np.array( ortho, dtype = float )
-
-    def resetStats( self ):
-        self.dmin = 2
 
 state = GameState()
 
@@ -315,17 +311,13 @@ while state.running:
     def simulateRejection():
         global vertices, translations
 
-        state.resetStats()
-
         def calcRejectionFor( i ):
             diffs = vertices[i] - vertices
-            distsSquared = np.square( diffs ).sum( axis = 1 )
-            dists = np.sqrt( distsSquared )
-            directions = diffs / dists[:,np.newaxis]
-            rejections = directions / distsSquared[:,np.newaxis]
-            rejection = np.nansum( rejections, axis = 0 )
-            state.dmin = min( state.dmin, np.min( dists[dists>0] ) )
-            return rejection
+            dists = np.square( diffs ).sum( axis = 1 )
+            diffs /= dists[:,np.newaxis]
+            dists **= 0.5
+            diffs /= dists[:,np.newaxis]
+            return np.nansum( diffs, axis = 0 )
 
         translationsSquared = np.square( translations ).sum( axis = 1 )
         translations *= np.power( np.e, -state.friction*translationsSquared )[:,np.newaxis]
@@ -539,7 +531,6 @@ while state.running:
                             "Voronoi Faces: " + str( vertices.shape[0] ) + "\n" + \
                             "Delauney Faces: " + str( vertices.shape[0] * 2 - 4 ) + "\n" + \
                             "Repulsion: " + str( round( 1000000 * state.repulsion ) ) + "uf^-2\n"
-                            "Dmin: " + str( int( 1000000 * state.dmin ) ) + "uU\n" + \
                             "Temperature: " + str( int( 1000000 * state.temperature ) ) + "uU²/f²" )
     
     render()
