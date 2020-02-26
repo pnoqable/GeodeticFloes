@@ -12,9 +12,22 @@ pygame.init()
 pygameFlags = pygame.RESIZABLE | pygame.OPENGL | pygame.DOUBLEBUF
 screen = pygame.display.set_mode( ( 800, 600 ), pygameFlags, 24 )
 
+def arrangedPointsOnSphere( n ):
+    indices = np.arange( n ).astype( 'float32' ) + 0.5
+    thetas = np.pi * ( 1 + 5 ** 0.5 ) * indices
+    phis = np.arccos( 1 - 2 * indices / indices.shape[0] )
+    widths = np.sin( phis )
+    heights = np.cos( phis )
+    return np.array( [ widths * np.cos( thetas ), heights, widths * np.sin( thetas ) ] ).T
+
+def randomPointsOnSphere( n ):
+    thetas = 2 * np.pi * np.random.sample( n )
+    heights = 2 * np.random.sample( n ) - 1
+    widths = ( 1 - heights ** 2 ) ** 0.5
+    return np.array( [ widths * np.cos( thetas ), heights, widths * np.sin( thetas ) ] ).T
+
 np.random.seed()
-vertices = np.random.sample( ( 1000, 3 ) ).astype( 'float32' ) - 0.5
-vertices /= np.linalg.norm( vertices, axis = 1 )[:,np.newaxis]
+vertices = randomPointsOnSphere( 1000 )
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
 glEnable( GL_DEPTH_TEST )
@@ -232,8 +245,7 @@ while state.running:
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 5:
             state.zoom( -1 )
         elif e.type == pygame.KEYDOWN and e.key == 93: # '+'
-            count = pow( 10, mod ) * pow( 100, mod2 )
-            state.pointsToAdd = np.random.sample( ( count, 3 ) ).astype( 'float32' ) - 0.5
+            state.pointsToAdd = randomPointsOnSphere( pow( 10, mod ) * pow( 100, mod2 ) )
         elif e.type == pygame.KEYDOWN and e.key == 47: # '-'
             count = min( pow( 10, mod ) * pow( 100, mod2 ), vertices.shape[0] - 4 )
             state.idsToRemove = vertices.shape[0] - count + np.arange( count )
@@ -241,10 +253,8 @@ while state.running:
             if state.selection is not None and vertices.shape[0] > 4:
                 state.idsToRemove = [state.selection]
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
-            indices = np.arange( vertices.shape[0] ).astype( 'float32' ) + 0.5
-            phi = np.arccos( 1 - 2 * indices / indices.shape[0] )
-            theta = np.pi * ( 1 + 5 ** 0.5 ) * indices
-            vertices = np.array( [ np.cos( theta ) * np.sin(phi), np.cos(phi), np.sin(theta) * np.sin(phi) ] ).T
+            makePoints = randomPointsOnSphere if mod else arrangedPointsOnSphere 
+            vertices = makePoints( vertices.shape[0] )
             translations[:] = 0
             if 'sv' in globals(): del sv
         elif e.type == pygame.KEYDOWN and e.unicode == 'p':
@@ -292,7 +302,6 @@ while state.running:
         if 'sv' in globals(): del sv
 
     if state.pointsToAdd is not None:
-        state.pointsToAdd /= np.linalg.norm( state.pointsToAdd, axis=1 )[:,np.newaxis]
         vertices = np.append( vertices, state.pointsToAdd, axis = 0 )
         translations = np.append( translations, np.zeros_like( state.pointsToAdd ), axis = 0 )
         state.pointsToAdd = None
