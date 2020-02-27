@@ -1,4 +1,6 @@
 import numpy as np
+import numba
+from numba import jit
 from scipy.spatial import SphericalVoronoi
 
 import pygame
@@ -25,6 +27,10 @@ def randomPointsOnSphere( n ):
     heights = 2 * np.random.sample( n ) - 1
     widths = ( 1 - heights ** 2 ) ** 0.5
     return np.array( [ widths * np.cos( thetas ), heights, widths * np.sin( thetas ) ] ).T
+
+@jit( nopython = True )
+def isClockwise( axis, v ):
+    return np.sum( np.cross( axis, v[0] ) * v[1] ) < 0
 
 np.random.seed()
 vertices = randomPointsOnSphere( 1000 )
@@ -348,11 +354,8 @@ while state.running:
         setSV()
 
         def fixOrientation():
-            for region in sv.regions:
-                a = sv.vertices[region[0]]
-                b = sv.vertices[region[1]]
-                c = sv.vertices[region[2]]
-                if np.sum( np.cross( b - a, c - b ) * b ) < 0:
+            for vertex, region in zip( vertices, sv.regions ):
+                if isClockwise( vertex, sv.vertices[region[:2]] ):
                     region.reverse()
 
         fixOrientation()
