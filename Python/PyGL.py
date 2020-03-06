@@ -315,15 +315,30 @@ while state.running:
     def simulateRejection():
         global vertices, translations, verticesProjections, verticesMasks
 
+        phiHalfs = ( 1 + 5 ** 0.5 ) / 4
+        thirdNormals = np.array( [
+            [0, -0.5, -phiHalfs],
+            [0, -0.5,  phiHalfs],
+            [0,  0.5, -phiHalfs],
+            [0,  0.5,  phiHalfs],
+            [-0.5, -phiHalfs, 0],
+            [-0.5,  phiHalfs, 0],
+            [ 0.5, -phiHalfs, 0],
+            [ 0.5,  phiHalfs, 0],
+            [-phiHalfs, 0, -0.5],
+            [-phiHalfs, 0,  0.5],
+            [ phiHalfs, 0, -0.5],
+            [ phiHalfs, 0,  0.5]
+        ] )
+        
         # todo optimize matrix calculation by duplicating and mirroring projections:
-        halfNormals = np.array( [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]], dtype = float )
-        verticesProjections = np.dot( halfNormals, vertices.T )
-        verticesMasks = verticesProjections > 0
-        verticesHalfs = np.array( [ vertices[mask] for mask in verticesMasks ] )
+        verticesProjections = np.dot( thirdNormals, vertices.T )
+        verticesMasks = verticesProjections > np.cos( np.pi * 0.3 )
+        verticesThirds = np.array( [ vertices[mask] for mask in verticesMasks ] )
          
         def calcRejectionFor( i ):
-            halfSpace = np.argmax( verticesProjections[:,i] )
-            diffs = vertices[i] - verticesHalfs[halfSpace]
+            thirdSpace = np.argmax( verticesProjections[:,i] )
+            diffs = vertices[i] - verticesThirds[thirdSpace]
             dists = np.square( diffs ).sum( axis = 1 )
             diffs /= dists[:,np.newaxis]
             dists **= 0.5
@@ -527,9 +542,9 @@ while state.running:
             if state.selection is not None:
                 if 'verticesProjections' in globals():
                     glColor4f( 1, 0.5, 0, 1 )
-                    halfSpace = np.argmax( verticesProjections[:,state.selection] )
-                    selectedHalf, = np.where( verticesMasks[halfSpace] )
-                    glDrawElements( GL_POINTS, selectedHalf.shape[0], GL_UNSIGNED_INT, selectedHalf )
+                    thirdSpace = np.argmax( verticesProjections[:,state.selection] )
+                    selectedThird, = np.where( verticesMasks[thirdSpace] )
+                    glDrawElements( GL_POINTS, selectedThird.shape[0], GL_UNSIGNED_INT, selectedThird )
 
                 glColor4f( 0.8, 0, 0, 1 )
                 rejected = grow( state.selection, state.maxRange )[1:]
