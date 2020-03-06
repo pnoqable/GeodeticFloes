@@ -313,7 +313,7 @@ while state.running:
         if 'sv' in globals(): del sv
     
     def simulateRejection():
-        global vertices, translations
+        global vertices, translations, verticesProjections, verticesMasks
 
         # todo optimize matrix calculation by duplicating and mirroring projections:
         halfNormals = np.array( [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]], dtype = float )
@@ -525,13 +525,19 @@ while state.running:
             glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
 
             if state.selection is not None:
+                if 'verticesProjections' in globals():
+                    glColor4f( 1, 0.5, 0, 1 )
+                    halfSpace = np.argmax( verticesProjections[:,state.selection] )
+                    selectedHalf, = np.where( verticesMasks[halfSpace] )
+                    glDrawElements( GL_POINTS, selectedHalf.shape[0], GL_UNSIGNED_INT, selectedHalf )
+
+                glColor4f( 0.8, 0, 0, 1 )
+                rejected = grow( state.selection, state.maxRange )[1:]
+                glDrawElements( GL_POINTS, len( rejected ), GL_UNSIGNED_INT, rejected )
+
                 glPointSize( 6 )
                 glColor4f( 0.8, 0, 0, 1 )
                 glDrawArrays( GL_POINTS, state.selection, 1 )
-
-                    glPointSize( 5 )
-                    rejected = grow( state.selection, state.maxRange )[1:]
-                    glDrawElements( GL_POINTS, len( rejected ), GL_UNSIGNED_INT, rejected )
 
         glUseProgram( 0 )
         glLoadMatrixf( state.ortho() )
