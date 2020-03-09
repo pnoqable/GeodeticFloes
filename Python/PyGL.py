@@ -120,7 +120,7 @@ class GameState:
 
     frames      = 0
     repulsion   = 5e-06
-    maxRange    = 0.17
+    maxRange    = 0.12
     friction    = 100
     
     temperature = 0
@@ -315,9 +315,9 @@ while state.running:
     def simulateRejection():
         global vertices, translations, verticesProjections, verticesMasks
 
-        thirdNormals = arrangedPointsOnSphere( 50 )
+        thirdNormals = arrangedPointsOnSphere( 200 )
         verticesProjections = np.dot( thirdNormals, vertices.T )
-        verticesMasks = verticesProjections > np.cos( np.pi * 0.15 )
+        verticesMasks = verticesProjections > np.cos( np.pi * 0.1 )
         verticesThirds = np.array( [ vertices[mask] for mask in verticesMasks ] )
          
         def calcRejectionFor( i ):
