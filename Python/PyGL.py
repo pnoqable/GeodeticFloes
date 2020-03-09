@@ -350,7 +350,9 @@ while state.running:
                 if isClockwise( vertex, sv.vertices[region[:2]] ):
                     region.reverse()
 
-        fixOrientation()
+        # todo: move this outside of updateGeometry
+        if state.culling:
+            fixOrientation()
 
         def setLinks():
             global links
