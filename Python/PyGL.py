@@ -120,7 +120,7 @@ class GameState:
 
     frames      = 0
     repulsion   = 5e-06
-    maxRange    = 0.333
+    maxRange    = 0.17
     friction    = 100
     
     temperature = 0
@@ -315,25 +315,9 @@ while state.running:
     def simulateRejection():
         global vertices, translations, verticesProjections, verticesMasks
 
-        phiHalfs = ( 1 + 5 ** 0.5 ) / 4
-        thirdNormals = np.array( [
-            [0, -0.5, -phiHalfs],
-            [0, -0.5,  phiHalfs],
-            [0,  0.5, -phiHalfs],
-            [0,  0.5,  phiHalfs],
-            [-0.5, -phiHalfs, 0],
-            [-0.5,  phiHalfs, 0],
-            [ 0.5, -phiHalfs, 0],
-            [ 0.5,  phiHalfs, 0],
-            [-phiHalfs, 0, -0.5],
-            [-phiHalfs, 0,  0.5],
-            [ phiHalfs, 0, -0.5],
-            [ phiHalfs, 0,  0.5]
-        ] )
-        
-        # todo optimize matrix calculation by duplicating and mirroring projections:
+        thirdNormals = arrangedPointsOnSphere( 50 )
         verticesProjections = np.dot( thirdNormals, vertices.T )
-        verticesMasks = verticesProjections > np.cos( np.pi * 0.3 )
+        verticesMasks = verticesProjections > np.cos( np.pi * 0.15 )
         verticesThirds = np.array( [ vertices[mask] for mask in verticesMasks ] )
          
         def calcRejectionFor( i ):
