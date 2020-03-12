@@ -5,7 +5,6 @@ from scipy.spatial import SphericalVoronoi
 
 import pygame
 from OpenGL.GL import *
-from OpenGL.arrays import vbo
 import glm
 import itertools as it
 from pathlib import Path
@@ -50,7 +49,11 @@ glEnable( GL_CULL_FACE )
 glEnable( GL_POINT_SMOOTH )
 glEnable( GL_LINE_SMOOTH )
 
-verticesBO = vbo.VBO( np.zeros( 0, dtype = 'float32' ) )
+vao = glGenVertexArrays( 1 )
+glBindVertexArray( vao )
+
+vbo = glGenBuffers( 1 )
+glBindBuffer( GL_ARRAY_BUFFER, vbo )
 glEnableClientState( GL_VERTEX_ARRAY )
 
 vtxShader = glCreateShader( GL_VERTEX_SHADER )
@@ -336,7 +339,7 @@ while state.running:
         simulateRejection()
 
     def updateGeometry():
-        global sv, verticesBO, allVertices, allVerticesWithColors, links, allLinks, tris, borders, allBorders 
+        global sv, links, allLinks, tris, borders, allBorders
 
         def setSV():
             global sv
@@ -405,10 +408,11 @@ while state.running:
         setColors()
 
         def setVertices():
-            global allVertices, allVerticesWithColors, verticesBO
             allVertices = np.append( vertices, sv.vertices ).astype( 'float32' )
             allVerticesWithColors = np.append( allVertices, colors )
-            verticesBO.set_array( allVerticesWithColors )
+            glBufferData( GL_ARRAY_BUFFER, allVerticesWithColors.nbytes, allVerticesWithColors, GL_DYNAMIC_DRAW )
+            glVertexPointer( 3, GL_FLOAT, 0, GLvoidp( 0 ) )
+            glColorPointer( 4, GL_FLOAT, 0, GLvoidp( allVertices.nbytes ) )
 
         setVertices()
         
@@ -447,20 +451,16 @@ while state.running:
         if state.voronoi:
             zOrder = np.argsort( np.dot( vertices, state.camera() ) )
             allTris = np.concatenate( tris[zOrder] )
-            with verticesBO:
-                glLineWidth( 1 )
-                glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-                glEnableClientState( GL_COLOR_ARRAY )
-                glColorPointer( 4, GL_FLOAT, 0, verticesBO + allVertices.nbytes )
-                glDrawElements( GL_TRIANGLES, len( allTris ), GL_UNSIGNED_INT, allTris )
-                glDisableClientState(  GL_COLOR_ARRAY )
+            glLineWidth( 1 )
+            glEnableClientState( GL_COLOR_ARRAY )
+            glDrawElements( GL_TRIANGLES, len( allTris ), GL_UNSIGNED_INT, allTris )
+            glDisableClientState(  GL_COLOR_ARRAY )
 
         glPolygonMode( GL_FRONT_AND_BACK, GL_FILL )
                     
         if selectedTris is not None:
-            with verticesBO:
-                glColor4f( 1, 0, 0, 0.2 )
-                glDrawElements( GL_TRIANGLES, selectedTris.shape[0], GL_UNSIGNED_INT, selectedTris )
+            glColor4f( 1, 0, 0, 0.2 )
+            glDrawElements( GL_TRIANGLES, selectedTris.shape[0], GL_UNSIGNED_INT, selectedTris )
         
         glUseProgram( shaderProgramLines )
         glUniformMatrix4fv( shaderProgramLinesView, 1, False, glm.value_ptr( state.view ) )
@@ -469,18 +469,14 @@ while state.running:
         glUniform1i( shaderProgramLinesMinOut, 1 )
 
         if selectedBorder is not None:
-            with verticesBO:
-                glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-                glLineWidth( 2 )
-                glColor4f( 1, 0, 0, 0.5 )
-                glDrawElements( GL_LINE_LOOP, len( selectedBorder ), GL_UNSIGNED_INT, selectedBorder )
+            glLineWidth( 2 )
+            glColor4f( 1, 0, 0, 0.5 )
+            glDrawElements( GL_LINE_LOOP, len( selectedBorder ), GL_UNSIGNED_INT, selectedBorder )
 
         if state.borders:
-            with verticesBO:
-                glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-                glLineWidth( 1 )
-                glColor4f( 0, 0, 0, 0.2 if not state.wireframe or not state.voronoi else 1 )
-                glDrawElements( GL_LINES, len( allBorders ), GL_UNSIGNED_INT, allBorders )
+            glLineWidth( 1 )
+            glColor4f( 0, 0, 0, 0.2 if not state.wireframe or not state.voronoi else 1 )
+            glDrawElements( GL_LINES, len( allBorders ), GL_UNSIGNED_INT, allBorders )
 
         glDepthMask( GL_FALSE )
 
@@ -489,11 +485,9 @@ while state.running:
         glUniform1i( shaderProgramLinesMinOut, 2 )
 
         if state.delauney:
-            with verticesBO:
-                glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-                glLineWidth( 1 )
-                glColor4f( 0, 0, 1, 0.2 )
-                glDrawElements( GL_LINES, len( allLinks ), GL_UNSIGNED_INT, allLinks )
+            glLineWidth( 1 )
+            glColor4f( 0, 0, 1, 0.2 )
+            glDrawElements( GL_LINES, len( allLinks ), GL_UNSIGNED_INT, allLinks )
 
         glDepthMask( state.maskWrite )
         
@@ -502,16 +496,14 @@ while state.running:
         glUniformMatrix4fv( shaderProgramPointsProj, 1, False, glm.value_ptr( state.proj ) )
 
         if state.points:
-            with verticesBO:
-                glVertexPointer( 3, GL_FLOAT, 0, verticesBO )
-                glPointSize( 5 )
-                glColor4f( 0, 0, 1, 0.5 )
-                glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
+            glPointSize( 5 )
+            glColor4f( 0, 0, 1, 0.5 )
+            glDrawArrays( GL_POINTS, 0, vertices.shape[0] )
 
-                if state.selection is not None:
-                    glPointSize( 6 )
-                    glColor4f( 0.9, 0, 0, 1 )
-                    glDrawArrays( GL_POINTS, state.selection, 1 )
+            if state.selection is not None:
+                glPointSize( 6 )
+                glColor4f( 0.8, 0, 0, 1 )
+                glDrawArrays( GL_POINTS, state.selection, 1 )
 
         glUseProgram( 0 )
         glLoadMatrixf( state.ortho() )
