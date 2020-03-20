@@ -32,7 +32,7 @@ def isClockwise( axis, v ):
     return np.sum( np.cross( axis, v[0] ) * v[1] ) < 0
 
 np.random.seed()
-vertices = randomPointsOnSphere( 1000 )
+vertices = randomPointsOnSphere( 5000 )
 translations = np.zeros( vertices.shape, dtype = 'float32' )
 
 glEnable( GL_DEPTH_TEST )
@@ -118,7 +118,7 @@ class GameState:
     idsToRemove = None
     pointsToAdd = None
 
-    frames      = 0
+    frames      = 1
     repulsion   = 5e-06
     friction    = 100
     
@@ -129,7 +129,7 @@ class GameState:
     view        = None
 
     running     = True
-    points      = False
+    points      = True
     delauney    = False
     voronoi     = True
     borders     = True
@@ -175,7 +175,7 @@ class GameState:
 
 state = GameState()
 
-while state.running:
+for frameCounter in range( 10 ):
 
     def unproject( screenPos ):
         screenPos = np.append( screenPos, [1] ).astype( float )
