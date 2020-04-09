@@ -1,0 +1,6 @@
+numba
+numpy
+pygame
+pyglm
+pyopengl
+scipy
