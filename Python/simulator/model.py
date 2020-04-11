@@ -98,8 +98,6 @@ class Model:
             self.links[i] = array
             self.degrees[i] = degree
 
-        self.allLinks = np.concatenate( self.links )
-
     def _updateBordersAndTris( self ):
         self.tris = np.empty( len( self.sv.regions ), dtype = np.object_ )
         self.borders = np.empty( len( self.sv.regions ), dtype = np.object_ )
@@ -113,8 +111,6 @@ class Model:
             tris[:,2] = borders[:,1] = array
             self.tris[i] = tris
             self.borders[i] = borders
-
-        self.allBorders = np.concatenate( self.borders )
 
     def updateGeometry( self ):
         self._updateSV()
