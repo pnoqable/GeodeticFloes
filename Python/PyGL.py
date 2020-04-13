@@ -14,17 +14,17 @@ Renderer.setupGL()
 class GameState:
     def __init__( self, count ):
         self.model       = Model( count )
-        self.simulator   = Simulator()
+        self.simulator   = Simulator( steps = 1 )
         self.camera      = Camera()
-        self.renderer    = Renderer()
+        self.renderer    = Renderer( points = True )
 
         self.exit        = False
 
         self.selection   = None
 
-state = GameState( 1000 )
+state = GameState( 5000 )
 
-while not state.exit:
+for i in range( 10 ):
 
     for e in pygame.event.get():
         mod = 1 if 'mod' in e.dict and int( e.mod ) & ( 64 + 128 ) else 0 # left or right CTRL
