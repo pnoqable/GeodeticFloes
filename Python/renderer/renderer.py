@@ -13,7 +13,7 @@ class Shader:
             raise RuntimeError( glGetShaderInfoLog( self.id ).decode() )
 
 class Program:
-    def __init__( self, shaders, uniforms ):
+    def __init__( self, shaders, uniforms, attributes = {} ):
         self.id = glCreateProgram()
 
         for shader in shaders:
@@ -24,12 +24,14 @@ class Program:
         if glGetProgramiv( self.id, GL_LINK_STATUS ) != GL_TRUE:
             raise RuntimeError(  glGetProgramInfoLog( self.id ).decode() )
 
-        self.uniforms = {}
-        for uniform in uniforms:
-            self.uniforms[uniform] = glGetUniformLocation( self.id, uniform )
+        self.locations = {}
+        for name in uniforms:
+            self.locations[name] = glGetUniformLocation( self.id, name )
+        for name in attributes:
+            self.locations[name] = glGetAttribLocation( self.id, name )
     
-    def __getitem__( self, key ):
-        return self.uniforms[key]
+    def __getitem__( self, name ):
+        return self.locations[name]
 
 class Renderer:
     @staticmethod
@@ -62,7 +64,7 @@ class Renderer:
         self.wireframe = wireframe
 
         self.vao = glGenVertexArrays( 1 )
-        self.vboVertices, self.vboColors = glGenBuffers( 2 )
+        self.vboVertices, self.vboDegrees = glGenBuffers( 2 )
 
         self.shaders = {}
         self.shaders["vertex"] = Shader( GL_VERTEX_SHADER, "vertex.glsl" )
@@ -74,7 +76,8 @@ class Renderer:
         self.programs["lines"] = Program( [self.shaders["vertex"], self.shaders["lines"]],
                                           ["view", "proj", "sides", "minOut"] )
         self.programs["tris"] = Program( [self.shaders["vertex"], self.shaders["tris"]],
-                                         ["view", "proj", "sides", "minOut"] )
+                                         ["view", "proj", "sides", "minOut", "alpha"],
+                                         ["degree"] )
 
     def setVertices( self, vertices ):
         glBindVertexArray( self.vao )
@@ -82,37 +85,32 @@ class Renderer:
         glBufferData( GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_DYNAMIC_DRAW )
         glVertexPointer( 3, GL_FLOAT, 0, GLvoidp( 0 ) )
 
-    def setColors( self, colors ):
+    def setDegrees( self, degrees ):
         glBindVertexArray( self.vao )
-        glBindBuffer( GL_ARRAY_BUFFER, self.vboColors )
-        glBufferData( GL_ARRAY_BUFFER, colors.nbytes, colors, GL_DYNAMIC_DRAW )
-        glColorPointer( 4, GL_FLOAT, 0, GLvoidp( 0 ) )
+        glBindBuffer( GL_ARRAY_BUFFER, self.vboDegrees )
+        glBufferData( GL_ARRAY_BUFFER, degrees.nbytes, degrees, GL_DYNAMIC_DRAW )
+        glVertexAttribPointer( self.programs["tris"]["degree"], 1, GL_UNSIGNED_INT, GL_FALSE, 0, GLvoidp( 0 ) )
     
-    def updateColors( self, degrees ):
-        # todo: pass degrees to shader and calculate color there
-        brightnesses = 1.3 - 0.1 * degrees.astype( 'float32' )
-        rgbs = np.repeat( brightnesses[:,np.newaxis], 3, axis = 1 )
-        alphas = self.alpha + ( 1 - self.alpha ) * brightnesses[:,np.newaxis]
-        colors = np.append( rgbs, alphas, axis = 1 )
-        self.setColors( colors )
-
     def renderVoronoi( self, camera, tris, indices, selection ):
         glUseProgram( self.programs["tris"].id )
         glUniformMatrix4fv( self.programs["tris"]["view"], 1, False, glm.value_ptr( camera.view ) )
         glUniformMatrix4fv( self.programs["tris"]["proj"], 1, False, glm.value_ptr( camera.proj ) )
         glUniform1f( self.programs["tris"]["sides"], self.shader )
         glUniform1i( self.programs["tris"]["minOut"], 1 )
+        glUniform1f( self.programs["tris"]["alpha"], self.alpha )
 
         glPolygonMode( GL_FRONT_AND_BACK, GL_LINE if self.wireframe else GL_FILL )
         glLineWidth( 1 )
 
-        glEnableClientState( GL_COLOR_ARRAY )
+        glColor4f( 1, 1, 1, 1 )
+        glEnableVertexAttribArray( self.programs["tris"]["degree"] )
         indexedTris = np.concatenate( tris if indices is None else  tris[indices] )
         glDrawElements( GL_TRIANGLES, indexedTris.size, GL_UNSIGNED_INT, indexedTris )
-        glDisableClientState(  GL_COLOR_ARRAY )
+        glDisableVertexAttribArray( self.programs["tris"]["degree"] )
 
         if selection is not None and ( indices is None or selection in indices ):
             glColor4f( 1, 0, 0, 0.2 )
+            glVertexAttrib1f( self.programs["tris"]["degree"], 0 )
             selectedTris = tris[selection]
             glDrawElements( GL_TRIANGLES, selectedTris.size, GL_UNSIGNED_INT, selectedTris )
 
@@ -173,8 +171,7 @@ class Renderer:
         glBindVertexArray( self.vao )
         glEnableClientState( GL_VERTEX_ARRAY )
 
-        cameraPos = camera.pos()
-        depths = np.dot( model.vertices, cameraPos )
+        depths = np.dot( model.vertices, camera.pos() )
         zOrder = np.argsort( depths )
         horizon = np.searchsorted( depths[zOrder], 1 )
 

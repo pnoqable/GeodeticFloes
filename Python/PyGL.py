@@ -78,7 +78,6 @@ while not state.exit:
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_a:
             state.renderer.alpha -= 0.1 * pow( 10, mod ) * pow( -1, mod2 )
             state.renderer.alpha = max( 0, min( 1, state.renderer.alpha ) )
-            state.renderer.updateColors( state.model.degrees )
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
             state.renderer.shader -= pow( 8, mod ) * pow( -1, mod2 )
             state.renderer.shader = max( 1, min( 8, state.renderer.shader ) )
@@ -100,7 +99,7 @@ while not state.exit:
     if state.model.needsUpdate():
         state.model.updateGeometry()
         state.renderer.setVertices( state.model.allVertices )
-        state.renderer.updateColors( state.model.degrees )
+        state.renderer.setDegrees( state.model.degrees )
 
     state.renderer.render( state.camera, state.model, state.selection )
 
