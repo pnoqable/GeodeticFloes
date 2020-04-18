@@ -40,6 +40,7 @@ class Simulator:
         self.steps     = steps
 
         self._maxVerticesCount = glGetInteger( GL_MAX_VERTEX_UNIFORM_VECTORS ) - 1
+        self._maxRejectionsCount = glGetInteger( GL_MAX_VARYING_VECTORS ) - 2
 
         # set up rejection shader
 
@@ -90,6 +91,9 @@ class Simulator:
 
     def simulate( self, model ):
 
+        rejectionsCount = int( np.ceil( model.count() / self._maxVerticesCount ) )
+        assert rejectionsCount <= self._maxRejectionsCount
+
         vertices = np.empty( ( model.count(), 4 ), dtype = np.float32 )
         vertices[:,:3] = model.vertices
         vertices[:,3] = 0
@@ -102,7 +106,6 @@ class Simulator:
         glEnableVertexAttribArray( self._vertex )
         glVertexAttribPointer( self._vertex, 4, GL_FLOAT, GL_FALSE, 0, GLvoidp( 0 ) )
         
-        rejectionsCount = int( np.ceil( model.count() / self._maxVerticesCount ) )
         rejections = np.empty( ( rejectionsCount, model.count(), 4 ), dtype = np.float32 )
 
         glBindBuffer( GL_TRANSFORM_FEEDBACK_BUFFER, self._vboRejections )
