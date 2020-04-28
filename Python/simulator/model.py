@@ -1,6 +1,6 @@
 import numpy as np
 
-from scipy.spatial import SphericalVoronoi
+from scipy.spatial import ConvexHull
 
 class Model:
     @staticmethod
@@ -26,10 +26,10 @@ class Model:
         self.invalidate()
     
     def invalidate( self ):
-        self.sv = None
+        self.tri = None
 
     def needsUpdate( self ):
-        return self.sv is None
+        return self.tri is None
         
     def count( self ):
         return self.vertices.shape[0]
@@ -74,43 +74,18 @@ class Model:
         self.removeVertexIds( ids )
 
     def _updateSV( self ):
-        self.sv = SphericalVoronoi( self.vertices )
-        self.sv.sort_vertices_of_regions()
+        self.tri = ConvexHull( self.vertices )
         
     def _updateVertices( self ):
-        self.allVertices = np.append( self.vertices, self.sv.vertices ).astype( np.float32 )
+        self.allVertices = self.vertices
 
     def _updateLinks( self ):
-        links = [set() for _ in self.vertices]
-        for simplex in self.sv._tri.simplices:
-            a, b, c = simplex[0], simplex[1], simplex[2]
-            links[a].update( ( b, c ) )
-            links[b].update( ( a, c ) )
-            links[c].update( ( a, b ) )
-
-        self.degrees = np.empty( len( links ), dtype = np.int32 )
-        self.links = np.empty( len( links ), dtype = np.object_ )
-        for i, ends in enumerate( links ):
-            degree =  len( ends )
-            array = np.empty( ( degree, 2 ), np.int32 )
-            array[:,0] = i
-            array[:,1] = np.fromiter( ends, np.int32 )
-            self.links[i] = array
-            self.degrees[i] = degree
+        self.links = np.empty( ( self.count(), 0 ), dtype = np.int32 )
+        self.degrees = np.full( self.count(), 0, dtype = np.int32 )
 
     def _updateBordersAndTris( self ):
-        self.tris = np.empty( len( self.sv.regions ), dtype = np.object_ )
-        self.borders = np.empty( len( self.sv.regions ), dtype = np.object_ )
-        for i, region in enumerate( self.sv.regions ):
-            array = np.array( region ) + self.count()
-            tris = np.empty( ( array.size, 3 ), np.int32 )
-            borders = np.empty( ( array.size, 2 ), np.int32 )
-            tris[:,0] = i
-            tris[0,1] = borders[0,0] = array[-1]
-            tris[1:,1] = borders[1:,0] = array[:-1]
-            tris[:,2] = borders[:,1] = array
-            self.tris[i] = tris
-            self.borders[i] = borders
+        self.tris = np.empty( ( self.count(), 0 ), dtype = np.int32 )
+        self.borders = np.empty( ( self.count(), 0 ), dtype = np.int32 )
 
     def updateGeometry( self ):
         self._updateSV()
