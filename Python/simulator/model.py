@@ -1,7 +1,5 @@
 import numpy as np
 
-from scipy.spatial import ConvexHull
-
 class Model:
     @staticmethod
     def arrangedPointsOnSphere( n ):
@@ -74,7 +72,7 @@ class Model:
         self.removeVertexIds( ids )
 
     def _updateSV( self ):
-        self.tri = ConvexHull( self.vertices )
+        self.tri = True
         
     def _updateVertices( self ):
         self.allVertices = self.vertices
