@@ -1,3 +1,5 @@
+icc-rt
+numba
 numpy
 pygame
 pyglm

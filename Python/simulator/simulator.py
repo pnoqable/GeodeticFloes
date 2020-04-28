@@ -1,4 +1,6 @@
 import numpy as np
+import numba
+from numba import njit, prange
 
 class Simulator:
     def __init__( self, friction = 100, repulsion = 5e-06, steps = 0 ):
@@ -7,13 +9,16 @@ class Simulator:
         self.steps     = steps
 
     @staticmethod
+    @njit( parallel = True, fastmath = True, cache = True )
     def _rejectionForId( vertices, i ):
         diffs = vertices[i] - vertices
-        dists = np.square( diffs ).sum( axis = 1 )
-        diffs /= dists[:,np.newaxis]
-        dists **= 0.5
-        diffs /= dists[:,np.newaxis]
-        return np.nansum( diffs, axis = 0 )
+        dists = np.square( diffs )
+        result = np.zeros_like( vertices[i] )
+        for j in prange( vertices.shape[0] ):
+            dist = dists[j].sum()
+            if dist > 0:
+                result += diffs[j] / dist ** 1.5
+        return result
 
     def simulateStep( self, model ):
         for i in range( model.count() ):

@@ -1,4 +1,6 @@
 import numpy as np
+import numba
+from numba import njit, prange
 
 from scipy.spatial import SphericalVoronoi
 
@@ -98,19 +100,22 @@ class Model:
             self.links[i] = array
             self.degrees[i] = degree
 
+    @staticmethod
+    @njit( cache = True )
+    def _makeBorderAndTris( i, region ):
+        tris = np.empty( ( region.size, 3 ), np.int32 )
+        borders = np.empty( ( region.size, 2 ), np.int32 )
+        tris[:,0] = i
+        tris[0,1] = borders[0,0] = region[-1]
+        tris[1:,1] = borders[1:,0] = region[:-1]
+        tris[:,2] = borders[:,1] = region
+        return tris, borders
+
     def _updateBordersAndTris( self ):
         self.tris = np.empty( len( self.sv.regions ), dtype = np.object_ )
         self.borders = np.empty( len( self.sv.regions ), dtype = np.object_ )
         for i, region in enumerate( self.sv.regions ):
-            array = np.array( region ) + self.count()
-            tris = np.empty( ( array.size, 3 ), np.int32 )
-            borders = np.empty( ( array.size, 2 ), np.int32 )
-            tris[:,0] = i
-            tris[0,1] = borders[0,0] = array[-1]
-            tris[1:,1] = borders[1:,0] = array[:-1]
-            tris[:,2] = borders[:,1] = array
-            self.tris[i] = tris
-            self.borders[i] = borders
+            self.tris[i], self.borders[i] = self._makeBorderAndTris( i, np.array( region ) + self.count() )
 
     def updateGeometry( self ):
         self._updateSV()
