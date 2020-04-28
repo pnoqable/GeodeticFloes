@@ -1,23 +1,30 @@
+from concurrent.futures import ThreadPoolExecutor, wait
+from multiprocessing import cpu_count
 import numpy as np
 
 class Simulator:
     def __init__( self, friction = 100, repulsion = 5e-06, steps = 0 ):
+        self.executor = ThreadPoolExecutor( cpu_count() )
         self.friction  = friction
         self.repulsion = repulsion
         self.steps     = steps
 
     @staticmethod
-    def _rejectionForId( vertices, i ):
-        diffs = vertices[i] - vertices
-        dists = np.square( diffs ).sum( axis = 1 )
-        diffs /= dists[:,np.newaxis]
-        dists **= 0.5
-        diffs /= dists[:,np.newaxis]
-        return np.nansum( diffs, axis = 0 )
+    def _rejectionForIds( vertices, ids ):
+        result = np.empty( ( ids.size, 3 ), dtype = np.float32 )
+        for o, i in enumerate( ids ):
+            diffs = vertices[i] - vertices
+            dists = np.square( diffs ).sum( axis = 1 )
+            diffs /= dists[:,np.newaxis] ** 1.5
+            result[o] = np.nansum( diffs, axis = 0 )
+        return result
 
     def simulateStep( self, model ):
-        for i in range( model.count() ):
-            model.translations[i] += self.repulsion * self._rejectionForId( model.vertices, i )
+        rangeSegments = np.array_split( range( model.count() ), min( cpu_count(), model.count() ) )
+        futures = [self.executor.submit( self._rejectionForIds, model.vertices, ids ) for ids in rangeSegments] 
+        
+        for ids, future in zip( rangeSegments, futures ):
+            model.translations[ids[0]:ids[0]+ids.size] += self.repulsion * future.result()
 
         projections = np.sum( model.vertices * model.translations, axis = 1 )
         model.translations -= model.vertices * projections[:,np.newaxis]
