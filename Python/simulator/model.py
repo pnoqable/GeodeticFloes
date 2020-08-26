@@ -82,7 +82,7 @@ class Model:
 
     def _updateLinks( self ):
         links = [set() for _ in self.vertices]
-        for simplex in self.sv._tri.simplices:
+        for simplex in self.sv._simplices:
             a, b, c = simplex[0], simplex[1], simplex[2]
             links[a].update( ( b, c ) )
             links[b].update( ( a, c ) )
